@@ -1,4 +1,4 @@
-#include "RuntimeLogger.h"
+#include "RuntimeLogger.hpp"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -35,7 +35,7 @@ const char *levelName(QtMsgType type)
     }
     return "UNKNOWN";
 }
-} // namespace
+} // 命名空间
 
 RuntimeLogger::~RuntimeLogger() { stop(); }
 
@@ -89,4 +89,4 @@ void RuntimeLogger::handleMessage(QtMsgType type, const QMessageLogContext &, co
     activeLogger->m_file.flush();
 }
 
-} // namespace ly27
+} // 命名空间 ly27

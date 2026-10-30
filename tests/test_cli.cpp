@@ -101,7 +101,8 @@ private slots:
             {"--config", directory.filePath("missing.json")},
             {"--run-for", "0"}, {"--run-for", "no"}, {"--run-for", "2147483648"},
             {"--status", "--check-config"}, {"unexpected"},
-            {"--unknown-option"}, {"--config"}
+            {"--unknown-option"}, {"--config"},
+            {"--watch"}, {"--mqtt", "--status"}, {"--status-at-exit", "--status"}
         };
         for (const auto &arguments : badArguments) {
             QProcess process;
@@ -116,7 +117,7 @@ private slots:
 
     void helpAndVersionDoNotRequireConfig()
     {
-        for (const auto &option : {"--help", "--version"}) {
+        for (const auto &option : {"--help", "--help-all", "--version", "--topics"}) {
             QProcess process;
             configureProcess(process, {"--config", "/missing/terminal.json", option});
             process.start();

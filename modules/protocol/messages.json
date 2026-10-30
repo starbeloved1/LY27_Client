@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "source": {
+    "document": "RoboMaster 2027 机甲大师高校系列赛通信协议 V1.0.0（20261029）.pdf",
+    "version": "1.0.0",
+    "date": "2026-10-29",
+    "sha256": "109a5e2a82afd3f253a5ac15aef7bb5e0aa354c6b41e3a6ceca7fed889e619e1"
+  },
+  "messages": [
+    {
+      "topic": "KeyboardMouseControl",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.1",
+      "purpose": "传输鼠标键盘输入。",
+      "schema_status": "defined",
+      "message": "KeyboardMouseControl",
+      "max_hz": 75
+    },
+    {
+      "topic": "CustomControl",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.2",
+      "purpose": "最大 60 字节的自定义数据。",
+      "schema_status": "defined",
+      "message": "CustomControl",
+      "max_hz": 75,
+      "data_max_bytes": 60
+    },
+    {
+      "topic": "GameStatus",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.3",
+      "purpose": "同步比赛全局状态信息。",
+      "schema_status": "defined",
+      "message": "GameStatus",
+      "frequency_hz": 5
+    },
+    {
+      "topic": "GlobalUnitStatus",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.4",
+      "purpose": "同步全局胜负相关状态。",
+      "schema_status": "defined",
+      "message": "GlobalUnitStatus",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "GlobalLogisticsStatus",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.5",
+      "purpose": "同步全局后勤信息。",
+      "schema_status": "defined",
+      "message": "GlobalLogisticsStatus",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "GlobalSpecialMechanism",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.6",
+      "purpose": "同步正在生效的全局特殊机制。",
+      "schema_status": "defined",
+      "message": "GlobalSpecialMechanism",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "Event",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.7",
+      "purpose": "全局事件通知。",
+      "schema_status": "defined",
+      "message": "Event",
+      "frequency": "triggered_or_conditional"
+    },
+    {
+      "topic": "RobotInjuryStat",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.8",
+      "purpose": "机器人一次存活期间累计受伤统计。",
+      "schema_status": "defined",
+      "message": "RobotInjuryStat",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "RobotRespawnStatus",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.9",
+      "purpose": "机器人复活状态同步。",
+      "schema_status": "defined",
+      "message": "RobotRespawnStatus",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "RobotStaticStatus",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.10",
+      "purpose": "机器人固定属性和配置。",
+      "schema_status": "defined",
+      "message": "RobotStaticStatus",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "RobotDynamicStatus",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.11",
+      "purpose": "机器人实时数据。",
+      "schema_status": "defined",
+      "message": "RobotDynamicStatus",
+      "frequency_hz": 10
+    },
+    {
+      "topic": "RobotModuleStatus",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.12",
+      "purpose": "机器人各模块运行状态。",
+      "schema_status": "defined",
+      "message": "RobotModuleStatus",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "RobotPosition",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.13",
+      "purpose": "机器人空间坐标和朝向。",
+      "schema_status": "defined",
+      "message": "RobotPosition",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "Buff",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.14",
+      "purpose": "Buff 效果信息。",
+      "schema_status": "defined",
+      "message": "Buff",
+      "frequency": "triggered_or_conditional"
+    },
+    {
+      "topic": "PenaltyInfo",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.15",
+      "purpose": "判罚信息同步。",
+      "schema_status": "defined",
+      "message": "PenaltyInfo",
+      "frequency": "triggered_or_conditional"
+    },
+    {
+      "topic": "RobotPathPlanInfo",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.16",
+      "purpose": "哨兵轨迹规划信息。",
+      "schema_status": "defined",
+      "message": "RobotPathPlanInfo",
+      "frequency": "triggered_or_conditional"
+    },
+    {
+      "topic": "MapClickInfo",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.17",
+      "purpose": "地图点击标记信息同步。",
+      "schema_status": "defined",
+      "message": "MapClickInfo",
+      "frequency": "triggered_or_conditional",
+      "note": "发送间隔按身份和控制方式区分，后续业务层按第 1.3.1 节处理。"
+    },
+    {
+      "topic": "MapClickCmd",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.18",
+      "purpose": "地图点击标记指令。",
+      "schema_status": "defined",
+      "message": "MapClickCmd",
+      "max_hz": 2,
+      "note": "发送间隔按身份和控制方式区分，后续业务层按第 1.3.1 节处理。"
+    },
+    {
+      "topic": "RadarInfoToClient",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.19",
+      "purpose": "雷达发送的机器人位置信息。",
+      "schema_status": "unresolved",
+      "message": null,
+      "frequency": "triggered_or_conditional",
+      "note": "原文外层字段缺少编号且类型矛盾，订阅并原样记录，待官方勘误或实测确认。"
+    },
+    {
+      "topic": "CustomByteBlock",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.20",
+      "purpose": "自定义数据流。",
+      "schema_status": "defined",
+      "message": "CustomByteBlock",
+      "frequency_hz": 50,
+      "data_max_bytes": 300
+    },
+    {
+      "topic": "AssemblyCommand",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.21",
+      "purpose": "重装装配指令。",
+      "schema_status": "defined",
+      "message": "AssemblyCommand",
+      "max_hz": 10
+    },
+    {
+      "topic": "TechCoreMotionStateSync",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.22",
+      "purpose": "科技核心运动状态同步。",
+      "schema_status": "defined",
+      "message": "TechCoreMotionStateSync",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "RobotPerformanceSelectionCommand",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.23",
+      "purpose": "地面机器人选择性能体系或控制方式。",
+      "schema_status": "defined",
+      "message": "RobotPerformanceSelectionCommand",
+      "max_hz": 10
+    },
+    {
+      "topic": "RobotPerformanceSelectionSync",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.24",
+      "purpose": "步兵性能体系状态同步。",
+      "schema_status": "defined",
+      "message": "RobotPerformanceSelectionSync",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "CommonCommand",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.25",
+      "purpose": "机器人多种常用指令。",
+      "schema_status": "defined",
+      "message": "CommonCommand",
+      "max_hz": 10
+    },
+    {
+      "topic": "RuneActivateCommand",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.26",
+      "purpose": "能量机关激活指令。",
+      "schema_status": "defined",
+      "message": "RuneActivateCommand",
+      "max_hz": 10
+    },
+    {
+      "topic": "RuneStatusSync",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.27",
+      "purpose": "能量机关状态同步。",
+      "schema_status": "defined",
+      "message": "RuneStatusSync",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "SentryStatusSync",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.28",
+      "purpose": "哨兵姿态相关信息。",
+      "schema_status": "defined",
+      "message": "SentryStatusSync",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "DartCommand",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.29",
+      "purpose": "飞镖控制指令。",
+      "schema_status": "defined",
+      "message": "DartCommand",
+      "max_hz": 10
+    },
+    {
+      "topic": "DartSelectTargetStatusSync",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.30",
+      "purpose": "飞镖目标选择状态同步。",
+      "schema_status": "defined",
+      "message": "DartSelectTargetStatusSync",
+      "frequency_hz": 1
+    },
+    {
+      "topic": "SentryCtrlCommand",
+      "direction": "outbound",
+      "qos": 1,
+      "section": "2.2.31",
+      "purpose": "哨兵控制指令请求。",
+      "schema_status": "defined",
+      "message": "SentryCtrlCommand",
+      "max_hz": 10
+    },
+    {
+      "topic": "SentryCtrlResult",
+      "direction": "inbound",
+      "qos": 1,
+      "section": "2.2.32",
+      "purpose": "哨兵控制指令结果反馈。",
+      "schema_status": "defined",
+      "message": "SentryCtrlResult",
+      "frequency": "triggered_or_conditional"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/TerminalIdentity.h"
+#include "TerminalIdentity.hpp"
 #include <QByteArray>
 #include <QJsonObject>
 #include <QString>
@@ -14,7 +14,7 @@ QString logLevelName(LogLevel level);
 struct NetworkConfig {
     QString mqttHost;
     quint16 mqttPort = 3333;
-    // Kept independent of role/robot ID; engine identity must be field-verified.
+    // MQTT 身份与角色、机器人编号分开配置，实际身份需现场核实。
     QString mqttClientId;
     quint16 videoPort = 3334;
 };
@@ -37,4 +37,4 @@ struct ConfigResult {
 ConfigResult parseConfig(const QByteArray &json, const QString &sourcePath);
 ConfigResult loadConfig(const QString &path);
 
-} // namespace ly27
+} // 命名空间 ly27

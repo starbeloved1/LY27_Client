@@ -1,4 +1,4 @@
-#include "TerminalConfig.h"
+#include "TerminalConfig.hpp"
 
 #include <QDir>
 #include <QFile>
@@ -58,7 +58,7 @@ public:
     }
 };
 
-} // namespace
+} // 命名空间
 
 QString logLevelName(LogLevel level)
 {
@@ -178,4 +178,4 @@ ConfigResult loadConfig(const QString &path)
     return parseConfig(file.readAll(), path);
 }
 
-} // namespace ly27
+} // 命名空间 ly27

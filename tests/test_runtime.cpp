@@ -1,4 +1,4 @@
-#include "app/TerminalRuntime.h"
+#include "TerminalRuntime.hpp"
 
 #include <QSignalSpy>
 #include <QtTest>
@@ -38,7 +38,8 @@ private slots:
         ly27::TerminalRuntime runtime({});
         runtime.start();
         const auto modules = runtime.snapshot()["modules"].toObject();
-        for (const auto &key : {"mqtt", "video", "commands"})
+        QCOMPARE(modules["mqtt"].toString(), QString("disabled"));
+        for (const auto &key : {"video", "commands"})
             QCOMPARE(modules[key].toString(), QString("not_implemented"));
     }
 };

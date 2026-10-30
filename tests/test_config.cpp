@@ -1,4 +1,4 @@
-#include "config/TerminalConfig.h"
+#include "TerminalConfig.hpp"
 
 #include <QDir>
 #include <QFile>
@@ -55,7 +55,7 @@ private slots:
         identity["robot_id"] = robotId ? QJsonValue(robotId) : QJsonValue(QJsonValue::Null);
         root["identity"] = identity;
         auto network = root["network"].toObject();
-        // Engine client ID is explicitly configurable, not inferred from role.
+        // 服务器身份显式配置，不根据角色自动推断。
         network["mqtt_client_id"] = "";
         root["network"] = network;
         const auto result = ly27::parseConfig(QJsonDocument(root).toJson(), LY27_EXAMPLE_CONFIG);

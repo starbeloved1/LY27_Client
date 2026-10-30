@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config/TerminalConfig.h"
+#include "TerminalConfig.hpp"
 #include <QFile>
 #include <QtLogging>
 
@@ -25,4 +25,4 @@ private:
     bool m_active = false;
 };
 
-} // namespace ly27
+} // 命名空间 ly27

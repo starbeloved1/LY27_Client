@@ -1,4 +1,4 @@
-#include "TerminalIdentity.h"
+#include "TerminalIdentity.hpp"
 
 namespace ly27 {
 
@@ -55,4 +55,4 @@ QString validateIdentity(const TerminalIdentity &identity)
     return {};
 }
 
-} // namespace ly27
+} // 命名空间 ly27
