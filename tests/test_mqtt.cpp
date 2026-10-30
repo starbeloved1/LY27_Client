@@ -121,7 +121,11 @@ private slots:
         QCOMPARE(status["parsed"].toInt(), 1);
         QCOMPARE(status["rejected"].toInt(), 1);
         QCOMPARE(status["unresolved"].toInt(), 1);
+        QVERIFY(runtime.stateStore().topic("GameStatus").isFresh());
+        QCOMPARE(runtime.stateStore().topic("GameStatus").fields["stage_countdown_sec"].toInt(), 300);
+        QCOMPARE(runtime.stateStore().topic("RadarInfoToClient").validity, QString("unknown"));
         runtime.stop();
+        QCOMPARE(runtime.stateStore().topic("GameStatus").validity, QString("disconnected"));
         QFile journal(status["journal"].toString());
         QVERIFY(journal.open(QIODevice::ReadOnly));
         const auto lines = journal.readAll().trimmed().split('\n');
@@ -134,28 +138,47 @@ private slots:
         QVERIFY(runtime.start(true));
         QVERIFY(runtime.snapshot()["session_id"].toString() != oldSession);
         QCOMPARE(runtime.snapshot()["protocol"].toObject()["received"].toInt(), 0);
+        QCOMPARE(runtime.stateStore().topic("GameStatus").validity, QString("unknown"));
         runtime.stop();
     }
 
     void reconnectAndResubscribe()
     {
+        ly27::TerminalConfig config;
+        config.identity.stationId = "reconnect";
+        config.identity.robotId = 3;
+        config.network = network("reconnect-runtime");
+        config.logDirectory = directory.filePath("reconnect-logs");
+        ly27::TerminalRuntime runtime(config);
+        QVERIFY(runtime.start(true));
         ly27::MqttTransport subscriber;
         QSignalSpy messages(&subscriber, &ly27::MqttTransport::messageReceived);
         QVERIFY(subscriber.start(network("reconnect-subscriber"), {"GameStatus"}));
-        QTRY_VERIFY_WITH_TIMEOUT(ready(subscriber), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(ready(subscriber) && runtime.snapshot()["modules"].toObject()["mqtt"] == "ready", 5000);
+        {
+            ly27::MqttTransport publisher;
+            QVERIFY(publisher.start(network("before-reconnect-peer"), {}));
+            QTRY_VERIFY_WITH_TIMEOUT(ready(publisher), 5000);
+            QVERIFY(publisher.publish("GameStatus", QByteArray::fromHex("2804")));
+            QTRY_VERIFY_WITH_TIMEOUT(runtime.stateStore().topic("GameStatus").isFresh(), 3000);
+            QTRY_COMPARE_WITH_TIMEOUT(messages.count(), 1, 3000);
+        }
         broker.kill();
         QVERIFY(broker.waitForFinished(3000));
         QTRY_VERIFY_WITH_TIMEOUT(!ready(subscriber), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(runtime.stateStore().topic("GameStatus").validity, QString("disconnected"), 5000);
         QVERIFY(startBroker());
         QTRY_VERIFY_WITH_TIMEOUT(brokerReady(), 5000);
-        QTRY_VERIFY_WITH_TIMEOUT(ready(subscriber), 12000);
+        QTRY_VERIFY_WITH_TIMEOUT(ready(subscriber) && runtime.snapshot()["modules"].toObject()["mqtt"] == "ready", 12000);
+        QCOMPARE(runtime.stateStore().topic("GameStatus").reason, QString("previous_connection"));
         QVERIFY(subscriber.snapshot()["successful_connections"].toInt() >= 2);
         QCOMPARE(subscriber.snapshot()["subscribed_topics"].toInt(), 1);
         ly27::MqttTransport publisher;
         QVERIFY(publisher.start(network("reconnect-peer"), {}));
         QTRY_VERIFY_WITH_TIMEOUT(ready(publisher), 5000);
         QVERIFY(publisher.publish("GameStatus", QByteArray::fromHex("2804")));
-        QTRY_COMPARE_WITH_TIMEOUT(messages.count(), 1, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(messages.count(), 2, 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(runtime.stateStore().topic("GameStatus").isFresh(), 3000);
     }
 
     void unavailableBrokerKeepsEventLoopResponsive()

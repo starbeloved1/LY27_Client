@@ -2,7 +2,7 @@
 
 RoboMaster 2027 自定义终端。使用 C++17、Qt 6.8 和 CMake，后端、命令行与测试统一使用 C++，先实现可独立运行的后端，再接入 Qt 图形界面。
 
-当前完成工程基础与第二阶段的 MQTT 接入：支持配置校验、三种角色、运行生命周期、日志、官方 Topic 清单、异步连接、23 个入站 Topic 订阅、接收解析、原始记录和断线重连。另提供通用发布接口供后续指令模块使用。状态管理、具体赛事操作、图传和正式 UI 尚未接入。
+当前完成工程基础、MQTT 与第三阶段状态管理：支持配置校验、三种角色、运行生命周期、日志、官方 Topic 清单、异步连接、23 个入站 Topic 订阅、接收解析、原始记录和断线重连；状态层保存全局、本机、各机器人及角色相关数据，并提供来源、时间和有效性。另提供通用发布接口供后续指令模块使用。具体赛事操作、图传和正式 UI 尚未接入。
 
 其中 `RadarInfoToClient` 的官方外层 schema 存在歧义，先保留原始数据并标记待确认；其他 22 个入站 Topic 正常解析。详见 [协议接入说明](docs/protocol-notes.md)。
 
@@ -51,7 +51,7 @@ ctest --preset local-dev
 # 连接配置中的 Broker，订阅全部入站消息，向 stdout 输出解析结果。
 ./build/dev/bin/ly27_cli --mqtt --watch
 
-# 有限时联调，退出时输出连接和解析统计。
+# 有限时联调，退出时输出连接、解析统计和业务状态。
 ./build/dev/bin/ly27_cli --mqtt --run-for 5000 --status-at-exit
 ```
 
@@ -69,6 +69,8 @@ cp config/terminal.example.json config/terminal.json
 JSON 状态写入 stdout，日志写入 stderr 和日志文件，便于脚本解析。
 
 `--watch` 每个消息输出一行 JSON；与 `--status-at-exit` 同用时末尾还会输出多行格式的最终状态，脚本处理时应选定需要的模式。
+
+状态输出中的 `business_state` 包含 `global`、`self`、`robots`、`role`、全部入站 `topics` 和最近 128 条事件类通知。每个状态带有 `fields`、`source`、`age_ms`、`ttl_ms`、`validity` 和 `reason`。启动后尚未收到的字段保持缺失；断线保留历史值并标记无效，重连后等待新消息。`--status-at-exit` 在停止后输出，所以已接收的数据会标记 `disconnected`。详见 [状态接口说明](docs/state-notes.md)。
 
 ## 本地订阅体验
 
@@ -118,10 +120,11 @@ modules/
 ├── config/                 配置读取、校验和路径解析
 ├── protocol/               schema、Topic 清单、编解码和协议校验
 ├── mqtt/                   异步传输、订阅、重连及通用发布
+├── state/                  状态存储、机器人归属、来源和有效性
 └── app/                    组织后端生命周期、日志和状态快照
 apps/cli/src/main.cpp       C++ 命令行入口
 config/                     示例配置与被忽略的个人配置
-tests/                      C++ 配置、生命周期、协议、CLI 和集成测试
+tests/                      C++ 配置、生命周期、协议、状态、CLI 和集成测试
 docs/                       接入路线、协议说明
 ```
 
@@ -136,6 +139,6 @@ modules/config/
 
 手写 C++ 头文件统一使用 `.hpp`，直接放在各模块的 `include/` 下。模块通过 CMake 导出自己的头文件路径，统一使用 `#include "TerminalConfig.hpp"` 这样的引用。Protobuf 生成的 C++ 文件保留在该模块的构建目录，测试仍放在 `tests/`。
 
-依赖关系：`config → core`，`mqtt → config`，`app → config/protocol/mqtt`，`cli → app`。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
+依赖关系：`config → core`，`mqtt → config`，`state → core/protocol`，`app → config/protocol/mqtt/state`，`cli → app`。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
 
 后端仍可无显示环境运行。未来桌面入口复用同一个后端，窗口不拥有通信和业务生命周期。构建产物、日志、个人配置和本机依赖路径不提交。

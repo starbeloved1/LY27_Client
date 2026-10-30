@@ -10,15 +10,17 @@
 namespace ly27 {
 
 TerminalRuntime::TerminalRuntime(TerminalConfig config, QObject *parent)
-    : QObject(parent), m_config(std::move(config)), m_mqtt(this)
+    : QObject(parent), m_config(std::move(config)), m_mqtt(this), m_state(m_config.identity, this)
 {
-    connect(&m_mqtt, &MqttTransport::stateChanged, this, [](const QString &state) {
+    connect(&m_mqtt, &MqttTransport::stateChanged, this, [this](const QString &state) {
         qInfo().noquote() << "mqtt.state=" + state;
+        m_state.setConnected(state == "subscribing" || state == "ready");
     });
     connect(&m_mqtt, &MqttTransport::errorOccurred, this, [](const QString &error) {
         qWarning().noquote() << "mqtt.error=" + error;
     });
     connect(&m_mqtt, &MqttTransport::messageReceived, this, &TerminalRuntime::receiveMessage);
+    connect(&m_state, &StateStore::changed, this, &TerminalRuntime::stateChanged);
 }
 
 TerminalRuntime::~TerminalRuntime() { stop(); }
@@ -30,6 +32,7 @@ bool TerminalRuntime::start(bool enableMqtt)
     m_mqttEnabled = enableMqtt;
     m_received = m_parsed = m_rejected = m_unresolved = 0;
     m_lastObservation = {};
+    m_state.reset(m_sessionId);
     if (enableMqtt) {
         if (m_config.network.mqttClientId.isEmpty()) {
             qCritical() << "启用 MQTT 前必须填写 network.mqtt_client_id";
@@ -64,6 +67,7 @@ void TerminalRuntime::stop()
     if (!m_running) return;
     m_running = false;
     m_mqtt.stop();
+    m_state.setConnected(false);
     m_journal.close();
     qInfo().noquote() << "runtime.stopped session=" + m_sessionId
                      << "uptime_ms=" + QString::number(m_uptime.elapsed());
@@ -84,6 +88,7 @@ QJsonObject TerminalRuntime::snapshot() const
                                {"video", "not_implemented"},
                                {"commands", "not_implemented"}}},
         {"mqtt", m_mqtt.snapshot()},
+        {"business_state", m_state.snapshot()},
         {"protocol", QJsonObject{{"received", m_received}, {"parsed", m_parsed},
             {"rejected", m_rejected}, {"unresolved", m_unresolved},
             {"journal", m_mqttEnabled ? m_journal.fileName() : QString()},
@@ -113,6 +118,7 @@ void TerminalRuntime::receiveMessage(const QString &topic, const QByteArray &pay
     if (m_journal.write(line) != line.size() || !m_journal.flush())
         qCritical() << "MQTT 原始消息记录失败" << m_journal.errorString();
     if (!decoded.isParsed()) qWarning().noquote() << "protocol.status=" + decoded.status << "topic=" + topic;
+    m_state.apply(decoded, receivedUtcMs, receivedMonotonicNs, retained);
     emit messageObserved(m_lastObservation);
 }
 

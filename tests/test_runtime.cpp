@@ -16,11 +16,14 @@ private slots:
         QSignalSpy stopped(&runtime, &ly27::TerminalRuntime::stopped);
         QVERIFY(!runtime.isRunning());
         QVERIFY(runtime.snapshot()["session_id"].toString().isEmpty());
+        QCOMPARE(runtime.stateStore().topic("GameStatus").validity, QString("unknown"));
         runtime.stop();
         QCOMPARE(stopped.count(), 0);
         runtime.start();
         const auto session = runtime.snapshot()["session_id"].toString();
         QVERIFY(!session.isEmpty());
+        QCOMPARE(runtime.snapshot()["business_state"].toObject()["session_id"].toString(), session);
+        QVERIFY(!runtime.snapshot()["business_state"].toObject()["connected"].toBool());
         runtime.start();
         QCOMPARE(started.count(), 1);
         QCOMPARE(runtime.snapshot()["session_id"].toString(), session);

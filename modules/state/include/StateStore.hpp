@@ -1,0 +1,88 @@
+#pragma once
+
+#include "MessageCodec.hpp"
+#include "TerminalIdentity.hpp"
+
+#include <QList>
+#include <QMap>
+#include <QObject>
+#include <QTimer>
+#include <functional>
+#include <optional>
+
+namespace ly27 {
+
+// 值与有效性一起返回；保留历史值不代表它仍可用于当前决策。
+struct StateValue {
+    QJsonObject fields;
+    QJsonObject source;
+    QString validity = "unknown";
+    QString reason = "not_received";
+    std::optional<qint64> ageMs;
+    std::optional<qint64> ttlMs;
+
+    bool isFresh() const { return validity == "fresh"; }
+    QJsonObject toJson() const;
+};
+
+// 只在所属 Qt 线程读写；网络回调由运行层投递，不直接访问此对象。
+class StateStore : public QObject {
+    Q_OBJECT
+public:
+    using Clock = std::function<qint64()>;
+    static constexpr int HistoryLimit = 128;
+
+    explicit StateStore(TerminalIdentity identity, QObject *parent = nullptr,
+                        Clock clock = monotonicNowNs);
+    static qint64 monotonicNowNs();
+
+    void reset(const QString &sessionId);
+    void setConnected(bool connected);
+    bool apply(const DecodedMessage &message, qint64 utcMs, qint64 monotonicNs,
+               bool retained = false);
+    StateValue topic(const QString &topic) const;
+    StateValue robotTopic(int robotId, const QString &topic) const;
+    StateValue robotHealth(int robotId) const;
+    StateValue buff(int robotId, int type) const;
+    QJsonObject snapshot() const;
+
+    // 检查时间导致的有效性变化；正常运行由内部定时器驱动。
+    void refresh();
+
+signals:
+    // topic 为空表示连接、会话或时间造成的批量变化。
+    void changed(const QString &topic);
+
+private:
+    struct Sample {
+        QString topic;
+        QJsonObject fields;
+        QString sessionId;
+        qint64 utcMs = 0;
+        qint64 monotonicNs = 0;
+        qint64 ttlMs = -1;
+        quint64 connection = 0;
+        bool received = false;
+        bool retained = false;
+        std::optional<int> robotId;
+    };
+
+    const TerminalIdentity m_identity;
+    Clock m_clock;
+    QTimer m_timer;
+    QString m_sessionId;
+    qint64 m_sessionStartedNs = 0;
+    bool m_connected = false;
+    quint64 m_connection = 0;
+    QMap<QString, Sample> m_topics;
+    QMap<int, QMap<QString, Sample>> m_robots;
+    QList<Sample> m_history;
+    QMap<QString, QString> m_validities;
+
+    StateValue view(const Sample &sample, qint64 nowNs) const;
+    QJsonObject robotSnapshot(int robotId, qint64 nowNs) const;
+    StateValue health(int robotId, qint64 nowNs) const;
+    QMap<QString, QString> validities() const;
+};
+
+} // 命名空间 ly27

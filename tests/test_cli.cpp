@@ -64,6 +64,9 @@ private slots:
         QCOMPARE(process.exitCode(), 0);
         const auto status = QJsonDocument::fromJson(process.readAllStandardOutput()).object();
         QCOMPARE(status["state"].toString(), QString("running"));
+        const auto business = status["business_state"].toObject();
+        QCOMPARE(business["session_id"].toString(), status["session_id"].toString());
+        QCOMPARE(business["topics"].toObject()["GameStatus"].toObject()["validity"].toString(), QString("unknown"));
         QVERIFY(!status["config"].toObject()["source_path"].toString().isEmpty());
         const auto path = status["log_file"].toString();
         QFile log(path);
