@@ -1,0 +1,6 @@
+/build/
+/logs/
+/config/terminal.json
+/CMakeUserPresets.json
+/compile_commands.json
+/.cache/
