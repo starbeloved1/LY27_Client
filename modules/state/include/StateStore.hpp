@@ -64,6 +64,8 @@ signals:
     void changed(const QString &topic);
 
 private:
+    friend class TerminalRuntime;
+    void reconfigureIdentity(const TerminalIdentity &identity);
     struct Sample {
         QString topic;
         QJsonObject fields;
@@ -81,7 +83,7 @@ private:
         quint64 roundRevision = 0;
     };
 
-    const TerminalIdentity m_identity;
+    TerminalIdentity m_identity;
     Clock m_clock;
     QTimer m_timer;
     QString m_sessionId;

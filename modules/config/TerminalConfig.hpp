@@ -30,6 +30,8 @@ struct TerminalConfig {
     QString logDirectory;
     LogLevel logLevel = LogLevel::Info;
 
+    // 可重新加载的配置文档不包含 source_path 等诊断字段。
+    QJsonObject toDocument() const;
     QJsonObject toJson() const;
 };
 
@@ -40,5 +42,9 @@ struct ConfigResult {
 
 ConfigResult parseConfig(const QByteArray &json, const QString &sourcePath);
 ConfigResult loadConfig(const QString &path);
+ConfigResult validateConfig(const TerminalConfig &config);
+// 保存到其他位置时转换相对日志路径，保持其实际指向不变。
+QByteArray serializeConfig(const TerminalConfig &config, const QString &path, QString &error);
+bool saveConfig(const TerminalConfig &config, const QString &path, QString &error);
 
 } // 命名空间 ly27

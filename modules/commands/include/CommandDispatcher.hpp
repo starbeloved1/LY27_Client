@@ -43,8 +43,10 @@ signals:
     void observed(const QJsonObject &event);
 
 private:
+    friend class TerminalRuntime;
+    void reconfigureIdentity(const TerminalIdentity &identity);
     struct Pending { QString id; qint64 submittedNs; };
-    const TerminalIdentity m_identity;
+    TerminalIdentity m_identity;
     const StateStore &m_state;
     MqttTransport &m_mqtt;
     Clock m_clock;

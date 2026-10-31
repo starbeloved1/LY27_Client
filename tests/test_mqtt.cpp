@@ -6,6 +6,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QProcess>
 #include <QSignalSpy>
 #include <QTcpServer>
@@ -97,6 +98,65 @@ private slots:
         QCOMPARE(received.count(), 1);
         publisher.stop();
         QVERIFY(!publisher.publish("GameStatus", bytes));
+    }
+
+    void runtimeIdentitySwitchIsolatesStateAndPendingCommands()
+    {
+        ly27::TerminalConfig config;
+        config.sourcePath = directory.filePath("switch.json");
+        config.identity.role = ly27::Role::Heavy;
+        config.identity.stationId = "heavy-switch";
+        config.identity.robotId = 1;
+        config.network = network("switch-heavy");
+        config.logDirectory = directory.filePath("switch-logs");
+        ly27::TerminalRuntime runtime(config);
+        ly27::MqttTransport publisher;
+        QVERIFY(runtime.start(true));
+        QVERIFY(publisher.start(network("switch-peer"), {}));
+        QTRY_VERIFY_WITH_TIMEOUT(runtime.commands().isReady() && ready(publisher), 5000);
+        QVERIFY(publisher.publish("GameStatus", QByteArray::fromHex("280430ac02")));
+        QTRY_VERIFY(runtime.stateStore().matchState().remainingSeconds.isFresh());
+        const auto originalSession = runtime.snapshot()["session_id"].toString();
+        auto invalid = config;
+        invalid.network.mqttClientId.clear();
+        QVERIFY(!runtime.applyConfig(invalid).applied);
+        QCOMPARE(runtime.snapshot()["session_id"].toString(), originalSession);
+        QVERIFY(runtime.commands().isReady());
+        const auto submitted = runtime.commands().selectPerformance({ly27::ShooterPerformance::Burst, {}});
+        QVERIFY2(submitted.accepted, qPrintable(submitted.error));
+        QCOMPARE(runtime.commands().snapshot()["pending"].toInt(), 1);
+        QSignalSpy observed(&runtime, &ly27::TerminalRuntime::commandObserved);
+        auto next = config;
+        next.identity.role = ly27::Role::Infantry;
+        next.identity.team = ly27::Team::Blue;
+        next.identity.robotId = 104;
+        next.identity.stationId = "blue-four";
+        next.network.mqttClientId = "switch-blue-four";
+        const auto changed = runtime.applyConfig(next);
+        QVERIFY2(changed.applied, qPrintable(changed.error));
+        QVERIFY(changed.restarted);
+        QVERIFY(runtime.snapshot()["session_id"].toString() != originalSession);
+        QVERIFY(!runtime.stateStore().matchState().remainingSeconds.value);
+        QVERIFY(runtime.stateStore().notifications().isEmpty());
+        QCOMPARE(runtime.stateStore().self()->robotId, 104);
+        QCOMPARE(runtime.commands().snapshot()["pending"].toInt(), 0);
+        QVERIFY(runtime.commands().snapshot()["records"].toArray().isEmpty());
+        bool uncertain = false;
+        for (const auto &event : observed) {
+            const auto json = event[0].toJsonObject();
+            if (json["session_id"].toString() == originalSession && json["transport"] == "uncertain") uncertain = true;
+        }
+        QVERIFY(uncertain);
+        QTRY_VERIFY_WITH_TIMEOUT(runtime.commands().isReady(), 5000);
+        QVERIFY(!runtime.stateStore().matchState().remainingSeconds.value);
+        QVERIFY(publisher.publish("GameStatus", QByteArray::fromHex("2804309002")));
+        QTRY_VERIFY(runtime.stateStore().matchState().remainingSeconds.isFresh());
+        QCOMPARE(*runtime.stateStore().matchState().remainingSeconds.value, 272);
+        QCOMPARE(runtime.stateStore().matchState().remainingSeconds.source.sessionId,
+                 runtime.snapshot()["session_id"].toString());
+        QCOMPARE(runtime.commands().snapshot()["pending"].toInt(), 0);
+        QVERIFY(runtime.commands().snapshot()["records"].toArray().isEmpty());
+        runtime.stop();
     }
 
     void runtimeRecordsParsedMalformedAndOpaquePayloads()

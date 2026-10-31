@@ -72,6 +72,13 @@ StateStore::StateStore(TerminalIdentity identity, QObject *parent, Clock clock)
     reset({});
 }
 
+void StateStore::reconfigureIdentity(const TerminalIdentity &identity)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    Q_ASSERT(!m_connected);
+    m_identity = identity;
+}
+
 void StateStore::reset(const QString &sessionId)
 {
     Q_ASSERT(QThread::currentThread() == thread());

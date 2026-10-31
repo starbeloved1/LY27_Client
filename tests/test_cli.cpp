@@ -105,6 +105,7 @@ private slots:
             {"--run-for", "0"}, {"--run-for", "no"}, {"--run-for", "2147483648"},
             {"--status", "--check-config"}, {"unexpected"},
             {"--unknown-option"}, {"--config"},
+            {"--watch-config", "--status"}, {"--watch-config", "--check-config"},
             {"--video", "--status"}, {"--save-frame", "test.png"},
             {"--watch"}, {"--mqtt", "--status"}, {"--status-at-exit", "--status"},
             {"--command-delay", "1"}, {"--command-file", "/missing/operation.json"}

@@ -49,13 +49,14 @@ int main(int argc, char **argv)
     const QCommandLineOption mqttOption("mqtt", "启用 MQTT 连接和全部入站 Topic 订阅。");
     const QCommandLineOption videoOption("video", "启用 UDP 图传接收与 H.265 解码，可独立于 MQTT 使用。");
     const QCommandLineOption saveFrameOption("save-frame", "将第一张新鲜视频帧保存为 PNG，需要 --video 和 --run-for。", "path");
+    const QCommandLineOption watchConfigOption("watch-config", "监听配置文件变化，校验后切换配置与身份；失败时保留或恢复旧配置。");
     const QCommandLineOption watchOption("watch", "将收到的协议消息输出为 JSON 行，需要 --mqtt。");
     const QCommandLineOption topicsOption("topics", "输出协议清单并退出，无需配置和网络。");
     const QCommandLineOption finalStatusOption("status-at-exit", "事件循环退出后输出最终状态。");
     const QCommandLineOption commandOption("command-file", "从 JSON 文件读取一条赛事操作，需要 --mqtt 和 --run-for。", "path");
     const QCommandLineOption delayOption("command-delay", "MQTT 就绪后等待指定毫秒再提交操作。", "milliseconds", "0");
     parser.addOptions({configOption, checkOption, statusOption, runForOption,
-                       mqttOption, videoOption, saveFrameOption, watchOption, topicsOption, finalStatusOption, commandOption, delayOption});
+                       mqttOption, videoOption, saveFrameOption, watchConfigOption, watchOption, topicsOption, finalStatusOption, commandOption, delayOption});
     if (!parser.parse(app.arguments())) return fail(parser.errorText());
     if (parser.isSet(helpOption) || parser.isSet("help-all")) parser.showHelp(0);
     if (parser.isSet(versionOption)) parser.showVersion();
@@ -76,6 +77,9 @@ int main(int argc, char **argv)
     if (parser.isSet(saveFrameOption) && (!parser.isSet(videoOption) || !parser.isSet(runForOption)
         || parser.value(saveFrameOption).isEmpty()))
         return fail("--save-frame 需要 --video、--run-for 和非空输出路径");
+    if (parser.isSet(watchConfigOption) && (parser.isSet(statusOption) || parser.isSet(checkOption)
+        || parser.isSet(topicsOption) || parser.isSet(commandOption)))
+        return fail("--watch-config 需要持续运行，不能与立即退出模式或 --command-file 组合");
     if (parser.isSet(topicsOption)) { printJson(ly27::MessageCodec::manifest()); return 0; }
     int duration = 0;
     if (parser.isSet(runForOption)) {
@@ -117,7 +121,7 @@ int main(int argc, char **argv)
         return fail(error, 3);
     qInfo().noquote() << "config.loaded path=" + result.config->sourcePath;
     qInfo().noquote() << "log.opened path=" + logger.filePath();
-    ly27::TerminalRuntime runtime(*result.config);
+    ly27::TerminalRuntime runtime(*result.config, nullptr, &logger);
     bool frameSaved = false, frameExportFailed = false;
     if (parser.isSet(saveFrameOption)) {
         QObject::connect(&runtime, &ly27::TerminalRuntime::videoFrameAvailable, &app, [&] {
@@ -165,6 +169,7 @@ int main(int argc, char **argv)
         });
     }
     if (!runtime.start(parser.isSet(mqttOption), parser.isSet(videoOption))) return fail("后端启动失败，详见日志", 4);
+    if (parser.isSet(watchConfigOption) && !runtime.setConfigWatching(true, error)) return fail(error, 2);
     if (parser.isSet(statusOption)) {
         auto status = runtime.snapshot();
         status.insert("log_file", logger.filePath());

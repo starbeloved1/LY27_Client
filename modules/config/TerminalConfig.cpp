@@ -7,6 +7,7 @@
 #include <QJsonParseError>
 #include <QHostAddress>
 #include <QStringList>
+#include <QSaveFile>
 #include <cmath>
 
 namespace ly27 {
@@ -73,10 +74,9 @@ QString logLevelName(LogLevel level)
     return {};
 }
 
-QJsonObject TerminalConfig::toJson() const
+QJsonObject TerminalConfig::toDocument() const
 {
     return {
-        {QStringLiteral("source_path"), sourcePath},
         {QStringLiteral("schema_version"), 1},
         {QStringLiteral("identity"), QJsonObject{
             {QStringLiteral("role"), roleName(identity.role)},
@@ -97,8 +97,16 @@ QJsonObject TerminalConfig::toJson() const
     };
 }
 
+QJsonObject TerminalConfig::toJson() const
+{
+    auto document = toDocument();
+    document.insert("source_path", sourcePath);
+    return document;
+}
+
 ConfigResult parseConfig(const QByteArray &json, const QString &sourcePath)
 {
+    if (json.size() > 65536) return {std::nullopt, "配置文件超过 64 KiB"};
     QJsonParseError parseError;
     const auto document = QJsonDocument::fromJson(json, &parseError);
     if (parseError.error != QJsonParseError::NoError) {
@@ -192,7 +200,43 @@ ConfigResult loadConfig(const QString &path)
     if (!file.open(QIODevice::ReadOnly))
         return {std::nullopt, QStringLiteral("Cannot read configuration %1: %2")
             .arg(QFileInfo(path).absoluteFilePath(), file.errorString())};
-    return parseConfig(file.readAll(), path);
+    if (file.size() > 65536) return {std::nullopt, "配置文件超过 64 KiB"};
+    return parseConfig(file.read(65537), path);
+}
+
+ConfigResult validateConfig(const TerminalConfig &config)
+{
+    if (config.sourcePath.trimmed().isEmpty()) return {std::nullopt, "配置来源路径不能为空"};
+    if (config.identity.team != Team::Red && config.identity.team != Team::Blue)
+        return {std::nullopt, "identity.team 无效"};
+    return parseConfig(QJsonDocument(config.toDocument()).toJson(), config.sourcePath);
+}
+
+QByteArray serializeConfig(const TerminalConfig &config, const QString &path, QString &error)
+{
+    error.clear();
+    if (path.trimmed().isEmpty()) { error = "保存路径不能为空"; return {}; }
+    const auto checked = validateConfig(config);
+    if (!checked.config) { error = checked.error; return {}; }
+    auto document = checked.config->toDocument();
+    auto logging = document.value("logging").toObject();
+    logging.insert("directory", QFileInfo(path).absoluteDir().relativeFilePath(checked.config->logDirectory));
+    document.insert("logging", logging);
+    return QJsonDocument(document).toJson(QJsonDocument::Indented);
+}
+
+bool saveConfig(const TerminalConfig &config, const QString &path, QString &error)
+{
+    const auto bytes = serializeConfig(config, path, error);
+    if (!error.isEmpty()) return false;
+    QSaveFile file(path);
+    // 禁止原地覆盖回退，写入或提交失败时保留原文件。
+    file.setDirectWriteFallback(false);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+        error = "配置保存失败：" + file.errorString();
+        return false;
+    }
+    return true;
 }
 
 } // 命名空间 ly27

@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QtTest>
+#include <QTemporaryDir>
 
 class ConfigTest : public QObject {
     Q_OBJECT
@@ -135,6 +136,42 @@ private slots:
         const auto result = ly27::parseConfig(QJsonDocument(root).toJson(), LY27_EXAMPLE_CONFIG);
         QVERIFY(!result.config);
         QVERIFY(result.error.contains("must be null"));
+    }
+
+    void atomicSaveRoundTripAndRelocation()
+    {
+        QTemporaryDir directory;
+        auto loaded = ly27::loadConfig(LY27_EXAMPLE_CONFIG);
+        QVERIFY(loaded.config);
+        auto config = *loaded.config;
+        config.logDirectory = directory.filePath("actual-logs");
+        QVERIFY(QDir().mkpath(directory.filePath("other")));
+        QString error;
+        const auto path = directory.filePath("other/terminal.json");
+        QVERIFY2(ly27::saveConfig(config, path, error), qPrintable(error));
+        const auto saved = ly27::loadConfig(path);
+        QVERIFY2(saved.config.has_value(), qPrintable(saved.error));
+        QCOMPARE(saved.config->logDirectory, config.logDirectory);
+        QCOMPARE(saved.config->identity.robotId, config.identity.robotId);
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto bytes = file.readAll(); file.close();
+        const auto document = QJsonDocument::fromJson(bytes).object();
+        QVERIFY(!document.contains("source_path"));
+        QCOMPARE(document["logging"].toObject()["directory"].toString(), QString("../actual-logs"));
+        config.identity.robotId = 101;
+        QVERIFY(!ly27::saveConfig(config, path, error));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), bytes); file.close();
+        config = *loaded.config;
+        QVERIFY(!ly27::saveConfig(config, directory.path(), error));
+        QVERIFY(!error.isEmpty());
+        config.identity.team = static_cast<ly27::Team>(99);
+        QVERIFY(!ly27::validateConfig(config).config);
+    }
+
+    void oversizedConfiguration()
+    {
+        QVERIFY(!ly27::parseConfig(QByteArray(65537, ' '), LY27_EXAMPLE_CONFIG).config);
     }
 
     void malformedDocuments()

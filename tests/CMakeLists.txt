@@ -44,3 +44,10 @@ target_compile_definitions(test_video PRIVATE
 add_dependencies(test_video ly27_cli)
 add_test(NAME video COMMAND test_video)
 set_tests_properties(video PROPERTIES TIMEOUT 30)
+
+add_executable(test_reconfiguration test_reconfiguration.cpp)
+target_link_libraries(test_reconfiguration PRIVATE ly27_app Qt6::Test Qt6::Network)
+target_compile_definitions(test_reconfiguration PRIVATE LY27_CLI_PATH="$<TARGET_FILE:ly27_cli>")
+add_dependencies(test_reconfiguration ly27_cli)
+add_test(NAME reconfiguration COMMAND test_reconfiguration)
+set_tests_properties(reconfiguration PROPERTIES TIMEOUT 40)

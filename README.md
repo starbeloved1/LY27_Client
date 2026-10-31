@@ -115,6 +115,17 @@ printf '\x28\x04\x30\xac\x02' | mosquitto_pub -h 127.0.0.1 -p 3333 -q 1 -t GameS
 
 程序会输出 `status: parsed` 和两个对应字段，并在日志目录中写入 MQTT 原始 JSONL 记录。本地可自定测试身份；官方引擎接受的 MQTT 身份必须另行核实。
 
+## 配置重载与身份切换
+
+`TerminalRuntime` 已提供 `applyConfig()`、`reloadConfig()`、`switchIdentity()` 和 `saveCurrentConfig()`。有效变更按原 MQTT/图传启用方式建立新会话；无效配置保留当前运行，初始化失败尝试恢复旧配置。状态仓库和指令对象保持稳定，已有信号连接可继续使用。
+
+```bash
+# 持续运行并监听个人配置；身份、网络和日志变更经校验后应用。
+./build/dev/bin/ly27_cli --config config/terminal.json --watch-config --mqtt --video
+```
+
+默认不监听，不自动保存。应用配置和保存文件分开；保存失败时不覆盖原文件。`--watch-config` 不能与立即退出模式或 `--command-file` 同用。接口、日志同步、失败恢复和另存语义见 [配置接入说明](docs/config-notes.md)。
+
 ## 图传
 
 ```bash

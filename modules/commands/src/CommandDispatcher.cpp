@@ -70,6 +70,20 @@ void CommandDispatcher::start(const QString &sessionId)
     if (isReady()) emit ready();
 }
 
+void CommandDispatcher::reconfigureIdentity(const TerminalIdentity &identity)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    Q_ASSERT(!m_running);
+    m_identity = identity;
+    m_sessionId.clear();
+    m_startedNs = 0;
+    m_accepted = m_rejected = 0;
+    m_records.clear();
+    m_pending.clear();
+    m_lastSent.clear();
+    m_lastServerResult = {};
+}
+
 void CommandDispatcher::stop()
 {
     Q_ASSERT(QThread::currentThread() == thread());
