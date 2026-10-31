@@ -2,9 +2,47 @@
 
 第三阶段加入 `modules/state/`，由 `TerminalRuntime` 在协议解析后更新。模块使用 Qt Core、身份定义和协议层，不依赖 MQTT 客户端或图形窗口。所有查询、更新和通知在所属 Qt 线程执行。
 
-## 入口与分组
+## C++ 业务结构
 
-- `TerminalRuntime::stateStore()`：只读访问，调用 `topic()`、`robotTopic()`、`robotHealth()`、`buff()` 或 `snapshot()`。
+将分散的协议数据整理成明确的结构，业务代码读取成员，不负责猜测 Topic 或解析 JSON：
+
+| 文件 | 主要结构与内容 |
+| --- | --- |
+| `include/StateTypes.hpp` | `StateField<T>`、`StateSource`、`DerivedState<T>`，统一表达值、来源及有效性 |
+| `include/MatchState.hpp` | `MatchState` 比赛阶段与时间；`GlobalState` 基地、前哨站、后勤、控制度及特殊机制 |
+| `include/RobotState.hpp` | `RobotState` 汇总机器人属性、血量、热量、模块、位置、复活、受伤、Buff 等 |
+| `include/RoleState.hpp` | `RoleState` 汇总装配、性能选择、能量机关、哨兵、飞镖及地图/路径/事件；有明确类型的通知 |
+| `src/StateModels.cpp` | 从存储的 Protobuf 样本读取有存在性的字段，构造上述 C++ 结构 |
+
+`StateStore` 保存共享的只读 Protobuf 样本，查询时生成业务结构；JSON 样本用于 CLI 诊断。两者共用同一份来源与有效性规则，不维护两套可独立写入的业务状态。Protobuf、JSON 和业务结构之间不通过默认零值补齐数据；`uint64` 在业务结构中保留精确整数，字节字段保留 `QByteArray`。
+
+```cpp
+const auto &store = runtime.stateStore();
+const auto robot = store.self();
+if (robot && robot->currentHealth.isFresh()) {
+    const quint32 hp = *robot->currentHealth.value;
+    // hp 为 0 也可能是有效观测；未知值不会通过 isFresh()。
+}
+
+const auto match = store.matchState();
+if (match.stage.isFresh() && *match.stage.value == ly27::GameStage::Battle) {
+    // 此处只说明比赛阶段，不表示任何赛事操作已获准。
+}
+```
+
+`robot(id)` 对合法的 8 个机器人编号返回状态结构，尚未收到数据时其中的字段无值；非法编号返回 `std::nullopt`。`self()` 仅表示本地配置绑定的机器人，指挥手为 `std::nullopt`。每次查询返回一个值快照，收到变化通知后重新查询；保存下来的旧 C++ 结构不会自行更新有效性。
+
+每个 `StateField<T>` 包含 `value` 和 `source`。`value` 是 `std::optional<T>`；`isFresh()` 同时检查有值和新鲜。同一机器人不同字段可来自不同 Topic，更新模块状态不会刷新血量的时间。枚举保留协议未知数字，读取枚举时仍需处理未知分支；生存状态为“未知”时，派生的 `alive` 无值。非有限浮点数在业务字段中标记未知，不输出可用的热量或坐标。
+
+机器人 `currentHealth` 按原有私有/全局血量来源选择；性能选择优先新鲜的同步消息，再使用新鲜静态属性，均失效时保留最近一次观测。`RoleState.performance` 在有本机绑定时使用同一份汇总结果。基地的 `controlState` 对应官方 `base_shield`，2027 含义是阵地控制状态，不解释为护盾血量。特殊机制按编号/时间配对，两数组长度不一致时该业务列表未知，诊断接口仍保留原值。
+
+`healthRatio`、`heatRatio`、复活 `progressRatio` 是派生比例，保留全部输入的 `StateSource`。只有分子、分母已知且分母大于零时计算；任意输入失效，派生值不再新鲜。比例不自动限制为 0–1，保留热量超过上限等事实。比例为零不推断战亡、复活完成或其他业务结果。
+
+`notifications()` 返回 `std::variant` 组成的通知列表，可用 `std::get_if` 或 `std::visit` 按事件、判罚、地图标记、路径和哨兵结果的实际类型处理。地图字段 `mode` 映射为 `markerType`，`type` 映射为 `markerMode`，按官方字段用途命名，避免混淆。路径保留分米坐标和有符号偏移数组，不擅自解释数组累加方式。
+
+## 入口与 JSON 诊断分组
+
+- `TerminalRuntime::stateStore()`：只读访问，业务调用 `matchState()`、`globalState()`、`robot(id)`、`self()`、`roleState()` 和 `notifications()`；诊断调用 `topic()`、`robotTopic()`、`robotHealth()`、`buff()` 或 `snapshot()`。
 - `TerminalRuntime::stateChanged(topic)`：消息更新时传 Topic；会话、连接或定时过期变化时 Topic 为空，调用方重新查询需要的状态。
 - `TerminalRuntime::snapshot().business_state`：CLI 可查看的完整 JSON 快照。
 
@@ -27,15 +65,7 @@
 
 标量只有本帧显式出现时才保存，包括显式的 `0` 和 `false`。更新同一 Topic 时整体替换本帧，不推断增量合并；上帧存在、本帧未发送的字段重新变为缺失。`repeated` 无字段存在性，空数组按空列表保存，可以清除旧列表。无法解析、超长、方向错误、schema 未确定、时间倒序或会话开始前的消息不覆盖状态。
 
-这意味着 `isFresh()` 只说明样本的新鲜程度，不保证业务需要的每个字段都有值。C++ 读取示例：
-
-```cpp
-const auto health = runtime.stateStore().robotHealth(3);
-if (health.isFresh() && health.fields.contains("current_health")) {
-    const auto hp = health.fields.value("current_health").toInteger();
-    // 这里的 0 是服务器明确发来的血量，不是缺失值的默认值。
-}
-```
+JSON 诊断接口的 `StateValue::isFresh()` 只说明样本的新鲜程度，不保证业务需要的每个字段都有值；业务使用 `StateField<T>::isFresh()`，已经把字段存在性一起检查。
 
 当前没有推算血量、倒计时、比赛阶段或机器人动作，也没有实现指令结果与请求的关联。`SentryCtrlResult` 保存为结果通知，不能据此推断机器人动作已经完成。
 
@@ -56,7 +86,9 @@ if (health.isFresh() && health.fields.contains("current_health")) {
 
 事件和条件通知没有固定发送周期，不套用周期超时。有效性每次查询实时计算；连接期间内部定时器每 100 ms 检查状态转变，因此没有新消息时也会发出过期通知。
 
-断线保留数据并立即失效；重新连上后旧样本保持 `stale/previous_connection`，收到对应新消息才能恢复。订阅请求期间即可接收入站状态，全部订阅是否成功仍以 MQTT 的 `ready` 为准，样本新鲜不代表全部 Topic 已获授权。每次启动新会话清空状态、Buff 和通知窗口；同一会话内不猜测官方局次切换时未发送的字段。
+断线保留数据并立即失效；重新连上后旧样本保持 `stale/previous_connection`，收到对应新消息才能恢复。订阅请求期间即可接收入站状态，全部订阅是否成功仍以 MQTT 的 `ready` 为准，样本新鲜不代表全部 Topic 已获授权。每次启动新会话清空状态、Buff 和通知窗口。
+
+首次明确收到 `GameStatus.current_round` 时记录局次上下文；再次收到不同局次（包括回退）时清空上一局的所有样本、机器人映射、Buff 和通知，仅保留新比赛消息、现有连接和会话，发出一次批量变化通知。局次切换前接收但延迟投递的旧消息不再写入。缺少局次字段或仅变化比赛阶段不会猜测换局；retained 消息不能驱动局次上下文变化，也不标记其属于当前局。样本来源中的 `round` 是接收时已知的局次上下文，不是对源端身份或消息产生局次的认证；局次未知时保持空。
 
 ## 机器人归属与血量
 
@@ -68,6 +100,6 @@ if (health.isFresh() && health.fields.contains("current_health")) {
 
 ## 验证范围
 
-状态单元测试通过可控单调时钟验证超时边界、字段缺失、显式零值、数组清空、不同 Buff、蓝方映射、来源选择、断线重连、会话重置和通知窗口；内部定时器也有实际事件循环验证。MQTT 集成测试验证真实本地 Broker 到运行层状态查询的链路、坏包隔离、停止失效、重连等待新样本和重新启动清空。
+状态单元测试通过可控单调时钟验证超时边界、字段缺失、显式零值、数组清空、不同 Buff、蓝方映射、来源选择、断线重连、会话重置和通知窗口；内部定时器也有实际事件循环验证。业务结构测试覆盖跨 Topic 汇总、独立字段时间、精确 64 位整数、二进制和空数据、枚举、派生比例、角色状态、类型化通知、机制配对与换局清理。MQTT 集成测试验证真实本地 Broker 到运行层 C++ 状态查询的链路、坏包隔离、停止失效、重连等待新样本和重新启动清空。
 
 官方引擎的实际身份、字段发送条件、权限、标量是否增量发送和真实网络波动尚待现场确认；当前保持缺失字段，不凭本地测试宣称实机数据已经完整。

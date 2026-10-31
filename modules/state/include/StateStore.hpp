@@ -2,6 +2,8 @@
 
 #include "MessageCodec.hpp"
 #include "TerminalIdentity.hpp"
+#include "MatchState.hpp"
+#include "RoleState.hpp"
 
 #include <QList>
 #include <QMap>
@@ -10,9 +12,10 @@
 #include <functional>
 #include <optional>
 
+// 解析字段后先进入StateStore再分发给各模块
 namespace ly27 {
 
-// 值与有效性一起返回；保留历史值不代表它仍可用于当前决策。
+// 值与有效性一起返回，历史值可保留
 struct StateValue {
     QJsonObject fields;
     QJsonObject source;
@@ -44,6 +47,13 @@ public:
     StateValue robotTopic(int robotId, const QString &topic) const;
     StateValue robotHealth(int robotId) const;
     StateValue buff(int robotId, int type) const;
+    // 业务代码使用这些 C++ 结构；上面的 Topic/JSON 接口保留用于诊断。
+    MatchState matchState() const;
+    GlobalState globalState() const;
+    std::optional<RobotState> robot(int robotId) const;
+    std::optional<RobotState> self() const;
+    RoleState roleState() const;
+    QList<StateNotification> notifications() const;
     QJsonObject snapshot() const;
 
     // 检查时间导致的有效性变化；正常运行由内部定时器驱动。
@@ -65,6 +75,10 @@ private:
         bool received = false;
         bool retained = false;
         std::optional<int> robotId;
+        std::shared_ptr<const google::protobuf::Message> message;
+        std::optional<quint32> projectedHealth;
+        std::optional<quint32> round;
+        quint64 roundRevision = 0;
     };
 
     const TerminalIdentity m_identity;
@@ -72,6 +86,9 @@ private:
     QTimer m_timer;
     QString m_sessionId;
     qint64 m_sessionStartedNs = 0;
+    qint64 m_roundStartedNs = 0;
+    std::optional<quint32> m_round;
+    quint64 m_roundRevision = 0;
     bool m_connected = false;
     quint64 m_connection = 0;
     QMap<QString, Sample> m_topics;
@@ -80,8 +97,11 @@ private:
     QMap<QString, QString> m_validities;
 
     StateValue view(const Sample &sample, qint64 nowNs) const;
+    StateSource source(const Sample &sample, qint64 nowNs) const;
+    void clearSamples();
     QJsonObject robotSnapshot(int robotId, qint64 nowNs) const;
     StateValue health(int robotId, qint64 nowNs) const;
+    Sample healthSample(int robotId, qint64 nowNs) const;
     QMap<QString, QString> validities() const;
 };
 

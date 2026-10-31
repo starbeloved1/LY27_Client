@@ -123,9 +123,14 @@ private slots:
         QCOMPARE(status["unresolved"].toInt(), 1);
         QVERIFY(runtime.stateStore().topic("GameStatus").isFresh());
         QCOMPARE(runtime.stateStore().topic("GameStatus").fields["stage_countdown_sec"].toInt(), 300);
+        const auto match = runtime.stateStore().matchState();
+        QCOMPARE(*match.stage.value, ly27::GameStage::Battle);
+        QCOMPARE(*match.remainingSeconds.value, 300);
+        QVERIFY(match.stage.isFresh());
         QCOMPARE(runtime.stateStore().topic("RadarInfoToClient").validity, QString("unknown"));
         runtime.stop();
         QCOMPARE(runtime.stateStore().topic("GameStatus").validity, QString("disconnected"));
+        QCOMPARE(runtime.stateStore().matchState().stage.source.validity, ly27::StateValidity::Disconnected);
         QFile journal(status["journal"].toString());
         QVERIFY(journal.open(QIODevice::ReadOnly));
         const auto lines = journal.readAll().trimmed().split('\n');
@@ -139,6 +144,7 @@ private slots:
         QVERIFY(runtime.snapshot()["session_id"].toString() != oldSession);
         QCOMPARE(runtime.snapshot()["protocol"].toObject()["received"].toInt(), 0);
         QCOMPARE(runtime.stateStore().topic("GameStatus").validity, QString("unknown"));
+        QVERIFY(!runtime.stateStore().matchState().stage.value);
         runtime.stop();
     }
 

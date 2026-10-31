@@ -1,4 +1,4 @@
-foreach(name config runtime cli protocol state)
+foreach(name config runtime cli protocol state state_models)
     add_executable(test_${name} test_${name}.cpp)
     target_link_libraries(test_${name} PRIVATE ly27_app Qt6::Test)
     add_test(NAME ${name} COMMAND test_${name})

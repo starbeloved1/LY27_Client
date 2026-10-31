@@ -2,7 +2,7 @@
 
 RoboMaster 2027 自定义终端。使用 C++17、Qt 6.8 和 CMake，后端、命令行与测试统一使用 C++，先实现可独立运行的后端，再接入 Qt 图形界面。
 
-当前完成工程基础、MQTT 与第三阶段状态管理：支持配置校验、三种角色、运行生命周期、日志、官方 Topic 清单、异步连接、23 个入站 Topic 订阅、接收解析、原始记录和断线重连；状态层保存全局、本机、各机器人及角色相关数据，并提供来源、时间和有效性。另提供通用发布接口供后续指令模块使用。具体赛事操作、图传和正式 UI 尚未接入。
+当前已接入工程基础、MQTT 与第三阶段的状态存储和 C++ 业务结构：支持配置校验、三种角色、运行生命周期、日志、官方 Topic 清单、异步连接、23 个入站 Topic 订阅、接收解析、原始记录和断线重连；状态层将数据整理成比赛、全局设施、机器人和角色状态，每个字段提供来源、时间和有效性。另提供通用发布接口供后续指令模块使用。具体赛事操作、图传和正式 UI 尚未接入。
 
 其中 `RadarInfoToClient` 的官方外层 schema 存在歧义，先保留原始数据并标记待确认；其他 22 个入站 Topic 正常解析。详见 [协议接入说明](docs/protocol-notes.md)。
 
@@ -72,6 +72,8 @@ JSON 状态写入 stdout，日志写入 stderr 和日志文件，便于脚本解
 
 状态输出中的 `business_state` 包含 `global`、`self`、`robots`、`role`、全部入站 `topics` 和最近 128 条事件类通知。每个状态带有 `fields`、`source`、`age_ms`、`ttl_ms`、`validity` 和 `reason`。启动后尚未收到的字段保持缺失；断线保留历史值并标记无效，重连后等待新消息。`--status-at-exit` 在停止后输出，所以已接收的数据会标记 `disconnected`。详见 [状态接口说明](docs/state-notes.md)。
 
+C++ 业务代码通过 `stateStore().matchState()`、`globalState()`、`robot(id)`、`self()`、`roleState()` 和 `notifications()` 读取明确的结构，不按 JSON 字符串拼状态。例如 `self()->currentHealth` 汇总私有或全局血量，`self()->maxHealth` 来自机器人静态属性；两者各自保留来源。明确收到不同局次后清理上一局数据。CLI 的 JSON 接口用于诊断，战术分析、提醒和机器人自定义载荷的内部解析按后续功能接入。
+
 ## 本地订阅体验
 
 先启动一个只监听回环地址的临时 Broker，端口需与个人配置保持一致：
@@ -120,7 +122,7 @@ modules/
 ├── config/                 配置读取、校验和路径解析
 ├── protocol/               schema、Topic 清单、编解码和协议校验
 ├── mqtt/                   异步传输、订阅、重连及通用发布
-├── state/                  状态存储、机器人归属、来源和有效性
+├── state/                  C++ 业务状态、机器人归属、来源和有效性
 └── app/                    组织后端生命周期、日志和状态快照
 apps/cli/src/main.cpp       C++ 命令行入口
 config/                     示例配置与被忽略的个人配置
