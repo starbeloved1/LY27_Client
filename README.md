@@ -155,16 +155,16 @@ tests/                      C++ 配置、生命周期、协议、状态、指令
 docs/                       接入路线、协议说明
 ```
 
-每个模块各自维护 `include/`、`src/` 和 CMake 文件，例如：
+每个模块维护自己的 CMake 文件。只有一个头文件和一个实现文件时直接放在模块根目录，例如：
 
 ```text
 modules/config/
 ├── CMakeLists.txt
-├── include/TerminalConfig.hpp
-└── src/TerminalConfig.cpp
+├── TerminalConfig.hpp
+└── TerminalConfig.cpp
 ```
 
-手写 C++ 头文件统一使用 `.hpp`，直接放在各模块的 `include/` 下。模块通过 CMake 导出自己的头文件路径，统一使用 `#include "TerminalConfig.hpp"` 这样的引用。Protobuf 生成的 C++ 文件保留在该模块的构建目录，测试仍放在 `tests/`。
+`core`、`config`、`mqtt`、`protocol` 当前采用上述布局；`app`、`state`、`commands` 有多个文件，保留各自的 `include/` 和 `src/`。手写 C++ 头文件统一使用 `.hpp`，模块通过 CMake 导出自己的头文件路径，引用仍统一写成 `#include "TerminalConfig.hpp"`。Protobuf 生成的 C++ 文件保留在该模块的构建目录，测试仍放在 `tests/`。
 
 依赖关系：`config → core`，`mqtt → config`，`state → core/protocol`，`commands → state/mqtt`，`app → config/protocol/mqtt/state/commands`，`cli → app`。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
 
