@@ -36,13 +36,13 @@ private slots:
         QCOMPARE(started.count(), 2);
     }
 
-    void doesNotClaimUnimplementedModulesAreConnected()
+    void disabledModulesRemainOffline()
     {
         ly27::TerminalRuntime runtime({});
         runtime.start();
         const auto modules = runtime.snapshot()["modules"].toObject();
         QCOMPARE(modules["mqtt"].toString(), QString("disabled"));
-        QCOMPARE(modules["video"].toString(), QString("not_implemented"));
+        QCOMPARE(modules["video"].toString(), QString("disabled"));
         QCOMPARE(modules["commands"].toString(), QString("offline"));
     }
 };

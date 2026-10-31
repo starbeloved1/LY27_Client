@@ -10,7 +10,9 @@
     "mqtt_host": "127.0.0.1",
     "mqtt_port": 3333,
     "mqtt_client_id": "3",
-    "video_port": 3334
+    "video_port": 3334,
+    "video_bind_address": "127.0.0.1",
+    "video_source_address": ""
   },
   "logging": {
     "directory": "../logs",

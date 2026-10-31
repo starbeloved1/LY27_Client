@@ -2,13 +2,13 @@
 
 RoboMaster 2027 自定义终端。使用 C++17、Qt 6.8 和 CMake，后端、命令行与测试统一使用 C++，先实现可独立运行的后端，再接入 Qt 图形界面。
 
-当前已接入工程基础、MQTT、状态存储与 C++ 业务结构，以及第四阶段的赛事指令。支持 23 个入站 Topic 订阅、解析、记录和重连；状态层整理比赛、全局设施、机器人和角色状态；指令层提供装配、性能选择、兑换/复活、能量机关、地图、哨兵和飞镖操作，统一检查参数、角色、必要状态和发送间隔。图传、实际输入设备和正式 UI 尚未接入。
+当前已接入工程基础、MQTT、状态存储与 C++ 业务结构，以及第四阶段的赛事指令。支持 23 个入站 Topic 订阅、解析、记录和重连；状态层整理比赛、全局设施、机器人和角色状态；指令层提供装配、性能选择、兑换/复活、能量机关、地图、哨兵和飞镖操作，统一检查参数、角色、必要状态和发送间隔。第五阶段已接入 UDP 图传接收、分片重组、H.265 软件解码与最新图像接口，支持 CLI 导出 PNG；实际输入设备和正式 UI 尚未接入，图传现场性能仍待验证。
 
 其中 `RadarInfoToClient` 的官方外层 schema 存在歧义，先保留原始数据并标记待确认；其他 22 个入站 Topic 正常解析。详见 [协议接入说明](docs/protocol-notes.md)。
 
 ## 构建
 
-依赖：C++17 编译器、CMake 3.22+、Ninja、Qt 6.8+ 的 Core、Protobuf 3.15+（含匹配的 `protoc`）、Paho MQTT C 异步库 `paho-mqtt3a`。开启测试时还需要 Qt Test、Qt Network 和 Mosquitto 可执行程序。当前不依赖 Widgets、QML 或 FFmpeg。
+依赖：C++17 编译器、CMake 3.22+、Ninja、Qt 6.8+ 的 Core、Network、Gui（仅用于图像）、Protobuf 3.15+（含匹配的 `protoc`）、Paho MQTT C 异步库 `paho-mqtt3a`，以及通过 pkg-config 查找的 FFmpeg 开发库 libavcodec ≥58、libavutil ≥56、libswscale ≥5。开启测试时还需要 Qt Test 和 Mosquitto 可执行程序。当前不依赖 Widgets、QML 或图形显示服务器；无需 FFmpeg 编码器即可运行测试。
 
 在本目录执行，将 Qt 路径替换为本机实际位置：
 
@@ -115,6 +115,18 @@ printf '\x28\x04\x30\xac\x02' | mosquitto_pub -h 127.0.0.1 -p 3333 -q 1 -t GameS
 
 程序会输出 `status: parsed` 和两个对应字段，并在日志目录中写入 MQTT 原始 JSONL 记录。本地可自定测试身份；官方引擎接受的 MQTT 身份必须另行核实。
 
+## 图传
+
+```bash
+# 独立启用图传，5 秒后查看状态统计。
+./build/dev/bin/ly27_cli --video --run-for 5000 --status-at-exit
+
+# 保存第一张新鲜视频帧，便于无界面验证。
+./build/dev/bin/ly27_cli --video --run-for 5000 --save-frame /tmp/ly27-frame.png
+```
+
+默认监听 `127.0.0.1:3334`，现场监听地址需在个人配置中调整。MQTT 与图传独立启用，允许同时指定 `--mqtt --video`。未来桌面界面通过 `videoFrameAvailable` 通知及 `runtime.video().latestFrame()` 获取 `QImage`，通过 `videoStateChanged` 判断停流；无需从 CLI 转发。接口、分片约束、恢复策略和现场待验证项见 [图传接入说明](docs/video-notes.md)。
+
 ## 配置约定
 
 - `schema_version`：当前为整数 `1`。未知字段、缺失字段和错误类型直接报错，不静默套用默认身份。
@@ -123,7 +135,7 @@ printf '\x28\x04\x30\xac\x02' | mosquitto_pub -h 127.0.0.1 -p 3333 -q 1 -t GameS
 - `identity.station_id`：本地席位名称，不能为空，与服务器 MQTT 身份分别配置。
 - `identity.robot_id`：重装为红方 `1`/蓝方 `101`；步兵为红方 `3`、`4`/蓝方 `103`、`104`；指挥手填 `null`。这些是本地身份一致性检查，不表示服务端授权。
 - `network.mqtt_client_id`：独立字符串，离线时允许为空，启用 MQTT 时必须填写。官方服务器接受的身份需要核实，尤其不能把指挥手自动当成某台地面机器人。修改机器人身份时同时核对该字段。
-- `network.mqtt_host`、`mqtt_port`：`--mqtt` 使用的主机和端口；主机只填写域名或 IP，不带协议前缀。`video_port` 仍为后续图传预留。端口必须为 1–65535 的整数，示例使用回环地址。
+- `network.mqtt_host`、`mqtt_port`：`--mqtt` 使用的主机和端口；主机只填写域名或 IP，不带协议前缀。`video_port` 用于 `--video` 的 UDP 监听。可选 `video_bind_address` 默认 `127.0.0.1`，现场需显式配置赛事网卡；`video_source_address` 默认空，可限制发送端 IPv4。端口必须为 1–65535 的整数，示例使用回环地址。
 - `logging.directory`：相对路径按**配置文件所在目录**解析；绝对路径直接使用。示例的 `../logs`，对于源码目录下的个人配置会指向项目 `logs/`，对于构建目录中的默认示例则指向 `build/<preset>/bin/logs/`。
 - `logging.level`：`debug`、`info`、`warning`、`error`。日志时间使用带 `Z` 的 UTC 时间，每次运行创建独立文件，不覆盖已有日志。
 
@@ -148,6 +160,7 @@ modules/
 ├── mqtt/                   异步传输、订阅、重连及通用发布
 ├── state/                  C++ 业务状态、机器人归属、来源和有效性
 ├── commands/               赛事操作、参数/角色/状态检查和限频
+├── video/                  UDP 分片重组、H.265 解码与最新图像
 └── app/                    组织后端生命周期、日志和状态快照
 apps/cli/src/main.cpp       C++ 命令行入口
 config/                     示例配置与被忽略的个人配置
@@ -164,8 +177,8 @@ modules/config/
 └── TerminalConfig.cpp
 ```
 
-`core`、`config`、`mqtt`、`protocol` 当前采用上述布局；`app`、`state`、`commands` 有多个文件，保留各自的 `include/` 和 `src/`。手写 C++ 头文件统一使用 `.hpp`，模块通过 CMake 导出自己的头文件路径，引用仍统一写成 `#include "TerminalConfig.hpp"`。Protobuf 生成的 C++ 文件保留在该模块的构建目录，测试仍放在 `tests/`。
+`core`、`config`、`mqtt`、`protocol` 当前采用上述布局；`app`、`state`、`commands`、`video` 有多个文件，保留各自的 `include/` 和 `src/`。手写 C++ 头文件统一使用 `.hpp`，模块通过 CMake 导出自己的头文件路径，引用仍统一写成 `#include "TerminalConfig.hpp"`。Protobuf 生成的 C++ 文件保留在该模块的构建目录，测试仍放在 `tests/`。
 
-依赖关系：`config → core`，`mqtt → config`，`state → core/protocol`，`commands → state/mqtt`，`app → config/protocol/mqtt/state/commands`，`cli → app`。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
+依赖关系：`config → core`，`mqtt → config`，`state → core/protocol`，`commands → state/mqtt`，`app → config/protocol/mqtt/state/commands/video`，`cli → app`。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
 
 后端仍可无显示环境运行。未来桌面入口复用同一个后端，窗口不拥有通信和业务生命周期。构建产物、日志、个人配置和本机依赖路径不提交。

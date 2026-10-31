@@ -34,3 +34,13 @@ target_compile_definitions(test_commands PRIVATE
 add_dependencies(test_commands ly27_cli)
 add_test(NAME commands COMMAND test_commands)
 set_tests_properties(commands PROPERTIES TIMEOUT 120)
+
+add_executable(test_video test_video.cpp)
+target_link_libraries(test_video PRIVATE ly27_app Qt6::Test Qt6::Network)
+target_compile_definitions(test_video PRIVATE
+    LY27_VIDEO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/video.hevc"
+    LY27_CLI_PATH="$<TARGET_FILE:ly27_cli>"
+    LY27_EXAMPLE_CONFIG="${PROJECT_SOURCE_DIR}/config/terminal.example.json")
+add_dependencies(test_video ly27_cli)
+add_test(NAME video COMMAND test_video)
+set_tests_properties(video PROPERTIES TIMEOUT 30)

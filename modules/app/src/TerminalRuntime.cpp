@@ -12,7 +12,7 @@ namespace ly27 {
 
 TerminalRuntime::TerminalRuntime(TerminalConfig config, QObject *parent)
     : QObject(parent), m_config(std::move(config)), m_mqtt(this), m_state(m_config.identity, this),
-      m_commands(m_config.identity, m_state, m_mqtt, this)
+      m_commands(m_config.identity, m_state, m_mqtt, this), m_video(this)
 {
     connect(&m_mqtt, &MqttTransport::stateChanged, this, [this](const QString &state) {
         qInfo().noquote() << "mqtt.state=" + state;
@@ -20,6 +20,11 @@ TerminalRuntime::TerminalRuntime(TerminalConfig config, QObject *parent)
     });
     connect(&m_mqtt, &MqttTransport::errorOccurred, this, [](const QString &error) {
         qWarning().noquote() << "mqtt.error=" + error;
+    });
+    connect(&m_video, &VideoReceiver::frameAvailable, this, &TerminalRuntime::videoFrameAvailable);
+    connect(&m_video, &VideoReceiver::stateChanged, this, [this](const QString &state) {
+        qInfo().noquote() << "video.state=" + state;
+        emit videoStateChanged(state);
     });
     connect(&m_mqtt, &MqttTransport::messageReceived, this, &TerminalRuntime::receiveMessage);
     connect(&m_state, &StateStore::changed, this, &TerminalRuntime::stateChanged);
@@ -35,7 +40,7 @@ TerminalRuntime::TerminalRuntime(TerminalConfig config, QObject *parent)
 
 TerminalRuntime::~TerminalRuntime() { stop(); }
 
-bool TerminalRuntime::start(bool enableMqtt)
+bool TerminalRuntime::start(bool enableMqtt, bool enableVideo)
 {
     if (m_running) return true;
     m_sessionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -43,6 +48,7 @@ bool TerminalRuntime::start(bool enableMqtt)
     m_received = m_parsed = m_rejected = m_unresolved = 0;
     m_lastObservation = {};
     m_state.reset(m_sessionId);
+    m_video.reset();
     if (enableMqtt) {
         if (m_config.network.mqttClientId.isEmpty()) {
             qCritical() << "启用 MQTT 前必须填写 network.mqtt_client_id";
@@ -62,6 +68,18 @@ bool TerminalRuntime::start(bool enableMqtt)
             return false;
         }
     }
+    if (enableVideo) {
+        QString error;
+        if (!m_video.start(m_config.network.videoPort, m_sessionId, error,
+                           QHostAddress(m_config.network.videoBindAddress),
+                           QHostAddress(m_config.network.videoSourceAddress))) {
+            qCritical().noquote() << "图传启动失败：" + error;
+            m_mqtt.stop();
+            m_journal.close();
+            m_state.setConnected(false);
+            return false;
+        }
+    }
     m_uptime.start();
     m_running = true;
     m_commands.start(m_sessionId);
@@ -77,6 +95,7 @@ void TerminalRuntime::stop()
 {
     if (!m_running) return;
     m_running = false;
+    m_video.stop();
     m_commands.stop();
     m_mqtt.stop();
     m_state.setConnected(false);
@@ -97,9 +116,10 @@ QJsonObject TerminalRuntime::snapshot() const
         {"uptime_ms", m_running ? m_uptime.elapsed() : qint64(0)},
         {"config", m_config.toJson()},
         {"modules", QJsonObject{{"mqtt", m_mqttEnabled ? m_mqtt.snapshot().value("state") : QJsonValue("disabled")},
-                               {"video", "not_implemented"},
+                               {"video", m_video.snapshot().value("state")},
                                {"commands", m_commands.snapshot().value("state")}}},
         {"mqtt", m_mqtt.snapshot()},
+        {"video", m_video.snapshot()},
         {"business_state", m_state.snapshot()},
         {"commands", m_commands.snapshot()},
         {"protocol", QJsonObject{{"received", m_received}, {"parsed", m_parsed},

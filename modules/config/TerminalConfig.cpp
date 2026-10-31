@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QHostAddress>
 #include <QStringList>
 #include <cmath>
 
@@ -15,7 +16,8 @@ class Reader {
 public:
     QString error;
 
-    bool keys(const QJsonObject &object, const QStringList &expected, const QString &path)
+    bool keys(const QJsonObject &object, const QStringList &expected, const QString &path,
+              const QStringList &optional = {})
     {
         for (const auto &key : expected) {
             if (!object.contains(key)) {
@@ -24,7 +26,7 @@ public:
             }
         }
         for (auto it = object.begin(); it != object.end(); ++it) {
-            if (!expected.contains(it.key())) {
+            if (!expected.contains(it.key()) && !optional.contains(it.key())) {
                 error = QStringLiteral("Unknown configuration field: %1%2").arg(path, it.key());
                 return false;
             }
@@ -86,7 +88,9 @@ QJsonObject TerminalConfig::toJson() const
             {QStringLiteral("mqtt_host"), network.mqttHost},
             {QStringLiteral("mqtt_port"), network.mqttPort},
             {QStringLiteral("mqtt_client_id"), network.mqttClientId},
-            {QStringLiteral("video_port"), network.videoPort}}},
+            {QStringLiteral("video_port"), network.videoPort},
+            {QStringLiteral("video_bind_address"), network.videoBindAddress},
+            {QStringLiteral("video_source_address"), network.videoSourceAddress}}},
         {QStringLiteral("logging"), QJsonObject{
             {QStringLiteral("directory"), logDirectory},
             {QStringLiteral("level"), logLevelName(logLevel)}}}
@@ -141,7 +145,8 @@ ConfigResult parseConfig(const QByteArray &json, const QString &sourcePath)
         return {std::nullopt, error};
 
     const auto network = root.value("network").toObject();
-    if (!reader.keys(network, {"mqtt_host", "mqtt_port", "mqtt_client_id", "video_port"}, "network."))
+    if (!reader.keys(network, {"mqtt_host", "mqtt_port", "mqtt_client_id", "video_port"}, "network.",
+                     {"video_bind_address", "video_source_address"}))
         return {std::nullopt, reader.error};
     if (!reader.string(network, "mqtt_host", "network.", config.network.mqttHost)
         || !reader.string(network, "mqtt_client_id", "network.", config.network.mqttClientId, true))
@@ -152,6 +157,18 @@ ConfigResult parseConfig(const QByteArray &json, const QString &sourcePath)
         return {std::nullopt, reader.error};
     config.network.mqttPort = static_cast<quint16>(mqttPort);
     config.network.videoPort = static_cast<quint16>(videoPort);
+    for (const auto &key : {QString("video_bind_address"), QString("video_source_address")}) {
+        if (!network.contains(key)) continue;
+        QString address;
+        const bool source = key == "video_source_address";
+        if (!reader.string(network, key, "network.", address, source)) return {std::nullopt, reader.error};
+        const QHostAddress parsed(address);
+        if ((!source || !address.isEmpty()) && (parsed.protocol() != QAbstractSocket::IPv4Protocol
+            || parsed.isMulticast() || parsed == QHostAddress::Broadcast || (source && parsed == QHostAddress::AnyIPv4)))
+            return {std::nullopt, "network." + key + " must be a unicast IPv4 address (bind may be 0.0.0.0)"};
+        if (source) config.network.videoSourceAddress = address;
+        else config.network.videoBindAddress = address;
+    }
 
     const auto logging = root.value("logging").toObject();
     if (!reader.keys(logging, {"directory", "level"}, "logging."))

@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QtLogging>
 
+// 日志工具。记录运行日志.log与通信记录.jsonl
 namespace ly27 {
 
 class RuntimeLogger {

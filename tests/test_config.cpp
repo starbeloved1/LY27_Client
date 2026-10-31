@@ -28,6 +28,19 @@ private slots:
         QCOMPARE(result.config->logDirectory, QDir::cleanPath(expected));
     }
 
+    void legacyVideoDefaults()
+    {
+        auto root = example();
+        auto network = root["network"].toObject();
+        network.remove("video_bind_address");
+        network.remove("video_source_address");
+        root["network"] = network;
+        const auto result = ly27::parseConfig(QJsonDocument(root).toJson(), LY27_EXAMPLE_CONFIG);
+        QVERIFY2(result.config.has_value(), qPrintable(result.error));
+        QCOMPARE(result.config->network.videoBindAddress, QString("127.0.0.1"));
+        QVERIFY(result.config->network.videoSourceAddress.isEmpty());
+    }
+
     void identities_data()
     {
         QTest::addColumn<QString>("role");
@@ -87,6 +100,11 @@ private slots:
         QTest::newRow("fractional-port") << "network" << "mqtt_port" << QJsonValue(3333.5);
         QTest::newRow("empty-host") << "network" << "mqtt_host" << QJsonValue(" ");
         QTest::newRow("wrong-client-type") << "network" << "mqtt_client_id" << QJsonValue(3);
+        QTest::newRow("video-bind-type") << "network" << "video_bind_address" << QJsonValue(12);
+        QTest::newRow("video-bind-hostname") << "network" << "video_bind_address" << QJsonValue("localhost");
+        QTest::newRow("video-source-broadcast") << "network" << "video_source_address" << QJsonValue("255.255.255.255");
+        QTest::newRow("video-source-any") << "network" << "video_source_address" << QJsonValue("0.0.0.0");
+        QTest::newRow("video-source-multicast") << "network" << "video_source_address" << QJsonValue("239.0.0.1");
         QTest::newRow("empty-log-directory") << "logging" << "directory" << QJsonValue("");
         QTest::newRow("unknown-log-level") << "logging" << "level" << QJsonValue("verbose");
     }

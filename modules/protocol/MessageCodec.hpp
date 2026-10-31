@@ -6,7 +6,7 @@
 #include <google/protobuf/message.h>
 #include <memory>
 
-// 按topic解码收到的载荷，或者把待发送消息编码为字节
+// 按topic解码反序列化收到的载荷，或者把待发送消息序列化编码为字节
 namespace ly27 {
 
 // 这里只输出协议消息，不保存血量、装配流程等业务状态。

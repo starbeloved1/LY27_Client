@@ -8,6 +8,7 @@
 #include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QTextStream>
@@ -46,13 +47,15 @@ int main(int argc, char **argv)
     const QCommandLineOption statusOption("status", "Start backend, print JSON status and exit.");
     const QCommandLineOption runForOption("run-for", "Stop automatically after the given milliseconds.", "milliseconds");
     const QCommandLineOption mqttOption("mqtt", "启用 MQTT 连接和全部入站 Topic 订阅。");
+    const QCommandLineOption videoOption("video", "启用 UDP 图传接收与 H.265 解码，可独立于 MQTT 使用。");
+    const QCommandLineOption saveFrameOption("save-frame", "将第一张新鲜视频帧保存为 PNG，需要 --video 和 --run-for。", "path");
     const QCommandLineOption watchOption("watch", "将收到的协议消息输出为 JSON 行，需要 --mqtt。");
     const QCommandLineOption topicsOption("topics", "输出协议清单并退出，无需配置和网络。");
     const QCommandLineOption finalStatusOption("status-at-exit", "事件循环退出后输出最终状态。");
     const QCommandLineOption commandOption("command-file", "从 JSON 文件读取一条赛事操作，需要 --mqtt 和 --run-for。", "path");
     const QCommandLineOption delayOption("command-delay", "MQTT 就绪后等待指定毫秒再提交操作。", "milliseconds", "0");
     parser.addOptions({configOption, checkOption, statusOption, runForOption,
-                       mqttOption, watchOption, topicsOption, finalStatusOption, commandOption, delayOption});
+                       mqttOption, videoOption, saveFrameOption, watchOption, topicsOption, finalStatusOption, commandOption, delayOption});
     if (!parser.parse(app.arguments())) return fail(parser.errorText());
     if (parser.isSet(helpOption) || parser.isSet("help-all")) parser.showHelp(0);
     if (parser.isSet(versionOption)) parser.showVersion();
@@ -68,6 +71,11 @@ int main(int argc, char **argv)
         return fail("--mqtt 需要运行事件循环；查看最终状态请使用 --status-at-exit");
     if (parser.isSet(finalStatusOption) && (parser.isSet(statusOption) || parser.isSet(checkOption) || parser.isSet(topicsOption)))
         return fail("--status-at-exit 需要运行事件循环，不能与立即退出模式组合");
+    if (parser.isSet(videoOption) && (parser.isSet(statusOption) || parser.isSet(checkOption) || parser.isSet(topicsOption)))
+        return fail("--video 需要运行事件循环；查看最终状态请使用 --status-at-exit");
+    if (parser.isSet(saveFrameOption) && (!parser.isSet(videoOption) || !parser.isSet(runForOption)
+        || parser.value(saveFrameOption).isEmpty()))
+        return fail("--save-frame 需要 --video、--run-for 和非空输出路径");
     if (parser.isSet(topicsOption)) { printJson(ly27::MessageCodec::manifest()); return 0; }
     int duration = 0;
     if (parser.isSet(runForOption)) {
@@ -110,6 +118,23 @@ int main(int argc, char **argv)
     qInfo().noquote() << "config.loaded path=" + result.config->sourcePath;
     qInfo().noquote() << "log.opened path=" + logger.filePath();
     ly27::TerminalRuntime runtime(*result.config);
+    bool frameSaved = false, frameExportFailed = false;
+    if (parser.isSet(saveFrameOption)) {
+        QObject::connect(&runtime, &ly27::TerminalRuntime::videoFrameAvailable, &app, [&] {
+            if (frameSaved || frameExportFailed) return;
+            const auto frame = runtime.video().latestFrame();
+            if (!frame) return;
+            QSaveFile output(parser.value(saveFrameOption));
+            if (!output.open(QIODevice::WriteOnly) || !frame->image.save(&output, "PNG") || !output.commit()) {
+                qCritical().noquote() << "视频帧导出失败：" + output.errorString();
+                frameExportFailed = true;
+                app.exit(6);
+                return;
+            }
+            frameSaved = true;
+            qInfo().noquote() << "video.frame_saved path=" + parser.value(saveFrameOption);
+        });
+    }
     bool commandScheduled = false;
     bool commandAttempted = false;
     bool commandFailed = false;
@@ -139,7 +164,7 @@ int main(int argc, char **argv)
             output.flush();
         });
     }
-    if (!runtime.start(parser.isSet(mqttOption))) return fail("后端启动失败，详见日志", 4);
+    if (!runtime.start(parser.isSet(mqttOption), parser.isSet(videoOption))) return fail("后端启动失败，详见日志", 4);
     if (parser.isSet(statusOption)) {
         auto status = runtime.snapshot();
         status.insert("log_file", logger.filePath());
@@ -166,6 +191,8 @@ int main(int argc, char **argv)
     if (parser.isSet(finalStatusOption)) printJson(runtime.snapshot());
     if (previousInterrupt != SIG_ERR) std::signal(SIGINT, previousInterrupt);
     if (previousTerminate != SIG_ERR) std::signal(SIGTERM, previousTerminate);
+    if (parser.isSet(saveFrameOption) && !frameSaved)
+        return fail(frameExportFailed ? "视频帧导出失败" : "运行时限内未收到可导出的新鲜视频帧", 6);
     if (command && !commandAttempted) return fail("运行时限内未能提交操作，没有缓存待发送指令", 5);
     if (command && !commandFailed) {
         bool delivered = false;
