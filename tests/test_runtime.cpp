@@ -42,8 +42,8 @@ private slots:
         runtime.start();
         const auto modules = runtime.snapshot()["modules"].toObject();
         QCOMPARE(modules["mqtt"].toString(), QString("disabled"));
-        for (const auto &key : {"video", "commands"})
-            QCOMPARE(modules[key].toString(), QString("not_implemented"));
+        QCOMPARE(modules["video"].toString(), QString("not_implemented"));
+        QCOMPARE(modules["commands"].toString(), QString("offline"));
     }
 };
 

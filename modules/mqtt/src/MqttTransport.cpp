@@ -171,8 +171,11 @@ struct MqttTransport::Private {
     static void publishFailed(void *context, MQTTAsync_failureData *failure)
     {
         const int code = failure ? failure->code : MQTTASYNC_FAILURE;
-        post(static_cast<Context *>(context), [code](Private &self) {
-            self.report(QStringLiteral("MQTT 发布失败，错误码 %1").arg(code));
+        const int token = failure ? failure->token : 0;
+        post(static_cast<Context *>(context), [code, token](Private &self) {
+            const auto error = QStringLiteral("MQTT 发布失败，错误码 %1").arg(code);
+            self.report(error);
+            emit self.owner->publishFailed(token, error);
         });
     }
 
@@ -279,9 +282,10 @@ void MqttTransport::stop()
     d->setState("stopped");
 }
 
-bool MqttTransport::publish(const QString &topic, const QByteArray &payload, int qos)
+bool MqttTransport::publish(const QString &topic, const QByteArray &payload, int qos, int *token)
 {
     Q_ASSERT(QThread::currentThread() == thread());
+    if (token) *token = 0;
     if (!d->client || d->state != "ready") { d->report("MQTT 未就绪，拒绝发布且不缓存指令"); return false; }
     if (topic.isEmpty() || topic.contains(QChar(0)) || topic.contains('#') || topic.contains('+')
         || payload.size() > 1024 * 1024 || qos < 0 || qos > 1) {
@@ -295,6 +299,7 @@ bool MqttTransport::publish(const QString &topic, const QByteArray &payload, int
     const auto name = topic.toUtf8();
     const int result = MQTTAsync_sendMessage(d->client, name.constData(), &message, &options);
     if (result != MQTTASYNC_SUCCESS) { d->report(QStringLiteral("无法提交发布，错误码 %1").arg(result)); return false; }
+    if (token) *token = options.token;
     emit publishQueued(topic, options.token);
     return true;
 }

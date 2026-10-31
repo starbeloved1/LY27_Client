@@ -105,7 +105,8 @@ private slots:
             {"--run-for", "0"}, {"--run-for", "no"}, {"--run-for", "2147483648"},
             {"--status", "--check-config"}, {"unexpected"},
             {"--unknown-option"}, {"--config"},
-            {"--watch"}, {"--mqtt", "--status"}, {"--status-at-exit", "--status"}
+            {"--watch"}, {"--mqtt", "--status"}, {"--status-at-exit", "--status"},
+            {"--command-delay", "1"}, {"--command-file", "/missing/operation.json"}
         };
         for (const auto &arguments : badArguments) {
             QProcess process;

@@ -7,7 +7,9 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QFile>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QTextStream>
 #include <QTimer>
 #include <csignal>
@@ -47,11 +49,16 @@ int main(int argc, char **argv)
     const QCommandLineOption watchOption("watch", "将收到的协议消息输出为 JSON 行，需要 --mqtt。");
     const QCommandLineOption topicsOption("topics", "输出协议清单并退出，无需配置和网络。");
     const QCommandLineOption finalStatusOption("status-at-exit", "事件循环退出后输出最终状态。");
+    const QCommandLineOption commandOption("command-file", "从 JSON 文件读取一条赛事操作，需要 --mqtt 和 --run-for。", "path");
+    const QCommandLineOption delayOption("command-delay", "MQTT 就绪后等待指定毫秒再提交操作。", "milliseconds", "0");
     parser.addOptions({configOption, checkOption, statusOption, runForOption,
-                       mqttOption, watchOption, topicsOption, finalStatusOption});
+                       mqttOption, watchOption, topicsOption, finalStatusOption, commandOption, delayOption});
     if (!parser.parse(app.arguments())) return fail(parser.errorText());
     if (parser.isSet(helpOption) || parser.isSet("help-all")) parser.showHelp(0);
     if (parser.isSet(versionOption)) parser.showVersion();
+    if (parser.isSet(commandOption) && (!parser.isSet(mqttOption) || !parser.isSet(runForOption) || parser.isSet(watchOption)))
+        return fail("--command-file 需要 --mqtt 和 --run-for，不能与 --watch 组合");
+    if (parser.isSet(delayOption) && !parser.isSet(commandOption)) return fail("--command-delay 需要 --command-file");
     if (!parser.positionalArguments().isEmpty()) return fail("Unexpected positional arguments");
     const int modes = int(parser.isSet(checkOption)) + int(parser.isSet(statusOption))
                       + int(parser.isSet(runForOption)) + int(parser.isSet(topicsOption));
@@ -71,6 +78,24 @@ int main(int argc, char **argv)
         duration = static_cast<int>(parsed);
     }
 
+    std::optional<ly27::CommandRequest> command;
+    int commandDelay = 0;
+    if (parser.isSet(commandOption)) {
+        bool ok = false;
+        const auto delay = parser.value(delayOption).toLongLong(&ok);
+        if (!ok || delay < 0 || delay >= duration) return fail("--command-delay 必须是小于运行时长的非负整数");
+        commandDelay = static_cast<int>(delay);
+        QFile file(parser.value(commandOption));
+        if (!file.open(QIODevice::ReadOnly)) return fail("无法读取指令文件：" + file.errorString());
+        if (file.size() > 65536) return fail("指令文件超过 64 KiB");
+        QJsonParseError error;
+        const auto document = QJsonDocument::fromJson(file.readAll(), &error);
+        if (error.error != QJsonParseError::NoError || !document.isObject()) return fail("指令文件必须是有效的 JSON 对象");
+        const auto parsed = ly27::parseCommandRequest(document.object());
+        if (!parsed.request) return fail(parsed.error);
+        command = parsed.request;
+    }
+
     const auto result = ly27::loadConfig(parser.value(configOption));
     if (!result.config) return fail(result.error);
     if (parser.isSet(checkOption)) {
@@ -85,6 +110,27 @@ int main(int argc, char **argv)
     qInfo().noquote() << "config.loaded path=" + result.config->sourcePath;
     qInfo().noquote() << "log.opened path=" + logger.filePath();
     ly27::TerminalRuntime runtime(*result.config);
+    bool commandScheduled = false;
+    bool commandAttempted = false;
+    bool commandFailed = false;
+    QString commandId;
+    if (command) {
+        QObject::connect(&runtime, &ly27::TerminalRuntime::commandObserved, &app, [](const QJsonObject &event) {
+            QTextStream output(stdout);
+            output << QJsonDocument(event).toJson(QJsonDocument::Compact) << '\n'; output.flush();
+        });
+        QObject::connect(&runtime.commands(), &ly27::CommandDispatcher::ready, &app, [&]() {
+            if (commandScheduled) return;
+            commandScheduled = true;
+            QTimer::singleShot(commandDelay, &app, [&]() {
+                commandAttempted = true;
+                const auto submission = runtime.commands().dispatch(*command);
+                commandFailed = !submission.accepted;
+                commandId = submission.id;
+                if (commandFailed) app.exit(5);
+            });
+        });
+    }
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &runtime, &ly27::TerminalRuntime::stop);
     if (parser.isSet(watchOption)) {
         QObject::connect(&runtime, &ly27::TerminalRuntime::messageObserved, &app, [](const QJsonObject &value) {
@@ -120,5 +166,14 @@ int main(int argc, char **argv)
     if (parser.isSet(finalStatusOption)) printJson(runtime.snapshot());
     if (previousInterrupt != SIG_ERR) std::signal(SIGINT, previousInterrupt);
     if (previousTerminate != SIG_ERR) std::signal(SIGTERM, previousTerminate);
-    return code;
+    if (command && !commandAttempted) return fail("运行时限内未能提交操作，没有缓存待发送指令", 5);
+    if (command && !commandFailed) {
+        bool delivered = false;
+        for (const auto &record : runtime.commands().snapshot().value("records").toArray()) {
+            const auto object = record.toObject();
+            if (object.value("id") == commandId && object.value("transport") == "delivered") delivered = true;
+        }
+        if (!delivered) return fail("未获得该操作的 MQTT 传输确认，服务器执行情况未知", 5);
+    }
+    return commandFailed ? 5 : code;
 }

@@ -2,7 +2,7 @@
 
 RoboMaster 2027 自定义终端。使用 C++17、Qt 6.8 和 CMake，后端、命令行与测试统一使用 C++，先实现可独立运行的后端，再接入 Qt 图形界面。
 
-当前已接入工程基础、MQTT 与第三阶段的状态存储和 C++ 业务结构：支持配置校验、三种角色、运行生命周期、日志、官方 Topic 清单、异步连接、23 个入站 Topic 订阅、接收解析、原始记录和断线重连；状态层将数据整理成比赛、全局设施、机器人和角色状态，每个字段提供来源、时间和有效性。另提供通用发布接口供后续指令模块使用。具体赛事操作、图传和正式 UI 尚未接入。
+当前已接入工程基础、MQTT、状态存储与 C++ 业务结构，以及第四阶段的赛事指令。支持 23 个入站 Topic 订阅、解析、记录和重连；状态层整理比赛、全局设施、机器人和角色状态；指令层提供装配、性能选择、兑换/复活、能量机关、地图、哨兵和飞镖操作，统一检查参数、角色、必要状态和发送间隔。图传、实际输入设备和正式 UI 尚未接入。
 
 其中 `RadarInfoToClient` 的官方外层 schema 存在歧义，先保留原始数据并标记待确认；其他 22 个入站 Topic 正常解析。详见 [协议接入说明](docs/protocol-notes.md)。
 
@@ -53,6 +53,9 @@ ctest --preset local-dev
 
 # 有限时联调，退出时输出连接、解析统计和业务状态。
 ./build/dev/bin/ly27_cli --mqtt --run-for 5000 --status-at-exit
+
+# MQTT 就绪后提交指令文件中的单次操作，输出指令事件。
+./build/dev/bin/ly27_cli --mqtt --run-for 3000 --command-file config/performance.json
 ```
 
 默认使用可执行文件旁的 `config/terminal.example.json`，从其他工作目录启动也可找到它。构建只复制示例文件，不覆盖用户配置。自建配置：
@@ -64,7 +67,7 @@ cp config/terminal.example.json config/terminal.json
 
 `--check-config`、`--status`、`--run-for`、`--topics` 互斥。`--mqtt` 显式开启网络，不能与立即退出的检查或状态模式同时使用；`--watch` 需要 `--mqtt`。普通启动仍只运行离线后端。
 
-退出码：`0` 正常退出；`2` 参数或配置错误；`3` 日志初始化失败；`4` 后端同步初始化失败。网络连接、订阅被拒绝等异步错误通过日志、连接状态和统计报告，定时结束不代表已经成功连接。`--help`、`--version`、`--topics` 无需加载配置。
+退出码：`0` 正常退出；`2` 参数、配置或指令文件格式错误；`3` 日志初始化失败；`4` 后端同步初始化失败；`5` 单次指令被拒绝、运行时限内未提交或未获得 MQTT 传输确认。普通接收模式的异步网络错误仍通过日志、连接状态和统计报告，定时结束不代表已经成功连接。指令模式的退出码 `0` 只说明传输得到确认，不代表赛事操作成功。`--help`、`--version`、`--topics` 无需加载配置。
 
 JSON 状态写入 stdout，日志写入 stderr 和日志文件，便于脚本解析。
 
@@ -73,6 +76,27 @@ JSON 状态写入 stdout，日志写入 stderr 和日志文件，便于脚本解
 状态输出中的 `business_state` 包含 `global`、`self`、`robots`、`role`、全部入站 `topics` 和最近 128 条事件类通知。每个状态带有 `fields`、`source`、`age_ms`、`ttl_ms`、`validity` 和 `reason`。启动后尚未收到的字段保持缺失；断线保留历史值并标记无效，重连后等待新消息。`--status-at-exit` 在停止后输出，所以已接收的数据会标记 `disconnected`。详见 [状态接口说明](docs/state-notes.md)。
 
 C++ 业务代码通过 `stateStore().matchState()`、`globalState()`、`robot(id)`、`self()`、`roleState()` 和 `notifications()` 读取明确的结构，不按 JSON 字符串拼状态。例如 `self()->currentHealth` 汇总私有或全局血量，`self()->maxHealth` 来自机器人静态属性；两者各自保留来源。明确收到不同局次后清理上一局数据。CLI 的 JSON 接口用于诊断，战术分析、提醒和机器人自定义载荷的内部解析按后续功能接入。
+
+## 发送赛事指令
+
+在本地 Broker 联调时，可以创建 `config/performance.json`：
+
+```json
+{"command":"performance","shooter":"burst","chassis":"power"}
+```
+
+然后使用上述 `--command-file` 命令。该模式要求 `--mqtt`、`--run-for`，不能与 `--watch` 组合；每次运行仅尝试一次，不循环发送。`--command-delay 1200` 可在首次 MQTT 就绪后等待 1200 ms，让周期状态先到达；状态仍未知或过期时拒绝有状态约束的操作，不自动重试。
+
+C++ 模块直接使用相同后端：
+
+```cpp
+const auto result = runtime.commands().selectPerformance({
+    ly27::ShooterPerformance::Burst, ly27::ChassisPerformance::Power
+});
+// result.accepted 表示通信层接受提交，后续传输事件由 commandObserved 通知。
+```
+
+指令状态位于运行快照的 `commands`，包含最近 128 条记录、待确认数量、最近哨兵结果。收发及指令事件共用 MQTT JSONL 日志。详细接口、指令文件示例、约束和实机验证边界见 [指令接入说明](docs/commands-notes.md)。键鼠发送和自定义载荷内部协议仍预留到输入阶段，不添加摩擦轮等推测实现。
 
 ## 本地订阅体验
 
@@ -123,10 +147,11 @@ modules/
 ├── protocol/               schema、Topic 清单、编解码和协议校验
 ├── mqtt/                   异步传输、订阅、重连及通用发布
 ├── state/                  C++ 业务状态、机器人归属、来源和有效性
+├── commands/               赛事操作、参数/角色/状态检查和限频
 └── app/                    组织后端生命周期、日志和状态快照
 apps/cli/src/main.cpp       C++ 命令行入口
 config/                     示例配置与被忽略的个人配置
-tests/                      C++ 配置、生命周期、协议、状态、CLI 和集成测试
+tests/                      C++ 配置、生命周期、协议、状态、指令、CLI 和集成测试
 docs/                       接入路线、协议说明
 ```
 
@@ -141,6 +166,6 @@ modules/config/
 
 手写 C++ 头文件统一使用 `.hpp`，直接放在各模块的 `include/` 下。模块通过 CMake 导出自己的头文件路径，统一使用 `#include "TerminalConfig.hpp"` 这样的引用。Protobuf 生成的 C++ 文件保留在该模块的构建目录，测试仍放在 `tests/`。
 
-依赖关系：`config → core`，`mqtt → config`，`state → core/protocol`，`app → config/protocol/mqtt/state`，`cli → app`。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
+依赖关系：`config → core`，`mqtt → config`，`state → core/protocol`，`commands → state/mqtt`，`app → config/protocol/mqtt/state/commands`，`cli → app`。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
 
 后端仍可无显示环境运行。未来桌面入口复用同一个后端，窗口不拥有通信和业务生命周期。构建产物、日志、个人配置和本机依赖路径不提交。

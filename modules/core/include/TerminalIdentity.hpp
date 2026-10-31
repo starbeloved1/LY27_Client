@@ -13,7 +13,7 @@ struct TerminalIdentity {
     Role role = Role::Infantry;
     Team team = Team::Red;
     QString stationId;
-    std::optional<int> robotId; // 指挥手无机器人编号
+    std::optional<int> robotId; // 指挥手没有机器人编号
 };
 
 QString roleName(Role role);

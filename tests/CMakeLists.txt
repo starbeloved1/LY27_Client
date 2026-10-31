@@ -24,3 +24,13 @@ target_compile_definitions(test_mqtt PRIVATE
 add_dependencies(test_mqtt ly27_cli)
 add_test(NAME mqtt COMMAND test_mqtt)
 set_tests_properties(mqtt PROPERTIES TIMEOUT 120)
+
+add_executable(test_commands test_commands.cpp)
+target_link_libraries(test_commands PRIVATE ly27_app Qt6::Test Qt6::Network)
+target_compile_definitions(test_commands PRIVATE
+    LY27_BROKER_PATH="${MOSQUITTO_EXECUTABLE}"
+    LY27_CLI_PATH="$<TARGET_FILE:ly27_cli>"
+    LY27_EXAMPLE_CONFIG="${PROJECT_SOURCE_DIR}/config/terminal.example.json")
+add_dependencies(test_commands ly27_cli)
+add_test(NAME commands COMMAND test_commands)
+set_tests_properties(commands PROPERTIES TIMEOUT 120)

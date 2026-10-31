@@ -22,16 +22,16 @@
 3. 输出 `unresolved_schema`，不构造或展示推测的机器人位置。
 4. `RadarSingleRobotInfo` 单体结构按原文保留，外层结构待官方勘误、官方有效 `.proto` 或真实样本确认后接入。
 
-其余 22 个入站 Topic 可以正常按定义解析。出站 9 个消息已定义和支持通用编码，但没有装配、兑换等业务操作入口。
+其余 22 个入站 Topic 可以正常按定义解析。出站 9 个消息已定义和支持通用编码，其中 7 个赛事 Topic 已由 `modules/commands/` 提供业务入口；键鼠与自定义控制保留给第六步输入接入。
 
 ## 发送与接收边界
 
 - `MqttTransport::publish` 是通用通信能力，不解释指令、不限制业务发送频率，也不提供角色授权。
 - `MessageCodec::encode` 检查出站 Topic、类型匹配和自定义载荷长度；`CustomControl` 最大 60 字节，接收 `CustomByteBlock` 最大 300 字节。
 - 通用传输只接受 QoS 0/1，发布不设置 retained，不在断线时缓存指令。
-- `publishQueued` 表示 Paho 接受发送请求，`publishDelivered` 表示传输完成；两者均不表示赛事操作成功。
-- 第四步再接入 `modules/commands/`，统一进行角色、参数、状态检查和限频。地图发送间隔需要按第 1.3.1 节区分身份和控制方式，清单中的 2 Hz 是最高值，不能直接用于所有角色。
-- 地图消息的 `mode`、`type` 按原文 schema 保留字段号，业务含义与枚举映射在第四步单独核对。
+- `publishQueued` 表示 Paho 接受发送请求，`publishDelivered` 表示传输完成；两者均不表示赛事操作成功。通用发布现在可返回 MQTT token，`publishFailed(token, error)` 报告异步传输失败，供指令层对应提交记录。
+- 第四步已接入 `modules/commands/`，统一进行角色、参数、状态检查和限频。地图发送间隔按身份区分，清单中的 2 Hz 是最高值，不能直接用于所有角色；本地策略及待现场核实部分见 `commands-notes.md`。
+- 地图消息的 `mode`、`type` 按原文 schema 保留字段号，业务接口分别命名为标记类型和目标模式，接收者固定补齐为 7 字节。哨兵控制的操作编号 2 无效，不连续枚举猜测。
 
 ## 连接、回调与退出
 
