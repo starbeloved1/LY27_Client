@@ -8,6 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core)
+option(LY27_BUILD_DESKTOP "构建 Qt Quick 桌面端" OFF)
 
 # 根构建只组织依赖顺序，各模块自行声明源码、头文件路径和链接依赖。
 add_subdirectory(modules/core)
@@ -20,7 +21,18 @@ add_subdirectory(modules/video)
 add_subdirectory(modules/app)
 add_subdirectory(apps/cli)
 
-foreach(target ly27_core ly27_config ly27_protocol ly27_mqtt ly27_state ly27_commands ly27_video ly27_app ly27_cli)
+set(ly27_project_targets
+    ly27_core ly27_config ly27_protocol ly27_mqtt ly27_state
+    ly27_commands ly27_video ly27_app ly27_cli
+)
+if(LY27_BUILD_DESKTOP)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Quick)
+    add_subdirectory(modules/ui)
+    add_subdirectory(apps/desktop)
+    list(APPEND ly27_project_targets ly27_ui ly27_desktop)
+endif()
+
+foreach(target IN LISTS ly27_project_targets)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /utf-8)
     else()

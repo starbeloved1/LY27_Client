@@ -2,13 +2,15 @@
 
 RoboMaster 2027 自定义终端。使用 C++17、Qt 6.8 和 CMake，后端、命令行与测试统一使用 C++，先实现可独立运行的后端，再接入 Qt 图形界面。
 
-当前已接入工程基础、MQTT、状态存储与 C++ 业务结构，以及第四阶段的赛事指令。支持 23 个入站 Topic 订阅、解析、记录和重连；状态层整理比赛、全局设施、机器人和角色状态；指令层提供装配、性能选择、兑换/复活、能量机关、地图、哨兵和飞镖操作，统一检查参数、角色、必要状态和发送间隔。第五阶段已接入 UDP 图传接收、分片重组、H.265 软件解码与最新图像接口，支持 CLI 导出 PNG；实际输入设备和正式 UI 尚未接入，图传现场性能仍待验证。
+桌面端优先提供**重装和指挥手**的信息辅助界面，与官方选手端配合使用。当前 Qt Quick 桌面已显示高清场地底图、顶部赛事/设施信息，以及地图上的机器人位置、等级和血量。暂用 RM26 的图标和信息条素材，地图分割、独立设施和角色专项操作后续接入。代码结构参考 RM26 的页面、业务面板和公共组件划分，具体布局和视觉风格继续讨论；主界面默认不使用图传。步兵前端暂缓，具体安排见 [桌面端方案](docs/desktop-plan.md)。
+
+当前已接入工程基础、MQTT、状态存储与 C++ 业务结构，以及第四阶段的赛事指令。支持 23 个入站 Topic 订阅、解析、记录和重连；状态层整理比赛、全局设施、机器人和角色状态；指令层提供装配、性能选择、兑换/复活、能量机关、地图、哨兵和飞镖操作，统一检查参数、角色、必要状态和发送间隔。第五阶段已接入 UDP 图传接收、分片重组、H.265 软件解码与最新图像接口，支持 CLI 导出 PNG；实际输入设备和完整角色界面尚未接入，图传现场性能仍待验证。
 
 其中 `RadarInfoToClient` 的官方外层 schema 存在歧义，先保留原始数据并标记待确认；其他 22 个入站 Topic 正常解析。详见 [协议接入说明](docs/protocol-notes.md)。
 
 ## 构建
 
-依赖：C++17 编译器、CMake 3.22+、Ninja、Qt 6.8+ 的 Core、Network、Gui（仅用于图像）、Protobuf 3.15+（含匹配的 `protoc`）、Paho MQTT C 异步库 `paho-mqtt3a`，以及通过 pkg-config 查找的 FFmpeg 开发库 libavcodec ≥58、libavutil ≥56、libswscale ≥5。开启测试时还需要 Qt Test 和 Mosquitto 可执行程序。当前不依赖 Widgets、QML 或图形显示服务器；无需 FFmpeg 编码器即可运行测试。
+后端依赖：C++17 编译器、CMake 3.22+、Ninja、Qt 6.8+ 的 Core、Network、Gui（用于图像）、Protobuf 3.15+（含匹配的 `protoc`）、Paho MQTT C 异步库 `paho-mqtt3a`，以及通过 pkg-config 查找的 FFmpeg 开发库 libavcodec ≥58、libavutil ≥56、libswscale ≥5。开启测试时还需要 Qt Test 和 Mosquitto 可执行程序。桌面端另需 Qt Quick 及 QtQuick QML 运行模块；桌面构建默认关闭，后端和 CLI 仍不依赖显示服务器或 Widgets。
 
 在本目录执行，将 Qt 路径替换为本机实际位置：
 
@@ -29,6 +31,36 @@ ctest --preset local-dev
 ```
 
 ## 运行
+
+### 战术地图桌面端
+
+在项目根目录执行：
+
+```bash
+./启动终端.sh
+```
+
+脚本自动选择本机 `local-dev` 预设（存在时），否则使用 `dev`，完成增量构建后启动桌面程序。从其他目录也可以使用脚本的绝对路径启动。需要指定预设时，例如运行 `LY27_PRESET=release ./启动终端.sh`；新机器仍需先配置本机 Qt 和依赖路径。
+
+手动构建与启动的等价命令：
+
+```bash
+cmake --preset local-dev -DLY27_BUILD_DESKTOP=ON
+cmake --build --preset local-dev --target ly27_desktop --parallel 2
+./build/local-dev/bin/ly27_desktop
+```
+
+默认离线，界面未知数据显示“—”，不会自动填演示数值。连接配置中的 MQTT 服务：
+
+```bash
+./启动终端.sh --mqtt --red-team "红方队名" --blue-team "蓝方队名"
+```
+
+可用 `--config config/terminal.local.json` 指定个人配置；默认读取可执行文件旁的 `config/terminal.example.json`。队名为本地显示参数，当前协议没有上报队名。桌面入口创建并管理同一个 `TerminalRuntime`，默认关闭图传。顶部包含局数、比分、阶段计时、双方基地和固定 R/B 前哨站血量，下方显示我方实时经济及双方累计控制度；地图显示八台地面机器人的位置、等级与血量，右下角可切换红蓝视角。显示策略与模拟器联调方法见 [地图联调说明](docs/map-testing.md)。
+
+入口为 `apps/desktop/src/main.cpp`，窗口与 C++ 展示适配位于 `modules/ui/include/`、`src/`，QML 和图片位于 `modules/ui/resources/`。底图保持比例，标记跟随实际图片区域缩放。
+
+### 后端与命令行
 
 以下以普通 `dev` 预设为例；使用 `local-dev` 时将路径中的 `build/dev` 改为 `build/local-dev`。
 
@@ -97,6 +129,8 @@ const auto result = runtime.commands().selectPerformance({
 ```
 
 指令状态位于运行快照的 `commands`，包含最近 128 条记录、待确认数量、最近哨兵结果。收发及指令事件共用 MQTT JSONL 日志。详细接口、指令文件示例、约束和实机验证边界见 [指令接入说明](docs/commands-notes.md)。键鼠发送和自定义载荷内部协议仍预留到输入阶段，不添加摩擦轮等推测实现。
+
+后续输入设计的按键习惯参考、RM26 实际键鼠上传链路和需要修正的冲突，见 [键鼠上传与快捷键参考](docs/input-reference.md)。该文档不表示输入模块已接入。
 
 ## 本地订阅体验
 
@@ -172,8 +206,10 @@ modules/
 ├── state/                  C++ 业务状态、机器人归属、来源和有效性
 ├── commands/               赛事操作、参数/角色/状态检查和限频
 ├── video/                  UDP 分片重组、H.265 解码与最新图像
-└── app/                    组织后端生命周期、日志和状态快照
+├── app/                    组织后端生命周期、日志和状态快照
+└── ui/                     Qt Quick 窗口、展示适配与地图资源
 apps/cli/src/main.cpp       C++ 命令行入口
+apps/desktop/src/main.cpp   C++ 桌面入口（可选构建）
 config/                     示例配置与被忽略的个人配置
 tests/                      C++ 配置、生命周期、协议、状态、指令、CLI 和集成测试
 docs/                       接入路线、协议说明
@@ -188,8 +224,8 @@ modules/config/
 └── TerminalConfig.cpp
 ```
 
-`core`、`config`、`mqtt`、`protocol` 当前采用上述布局；`app`、`state`、`commands`、`video` 有多个文件，保留各自的 `include/` 和 `src/`。手写 C++ 头文件统一使用 `.hpp`，模块通过 CMake 导出自己的头文件路径，引用仍统一写成 `#include "TerminalConfig.hpp"`。Protobuf 生成的 C++ 文件保留在该模块的构建目录，测试仍放在 `tests/`。
+`core`、`config`、`mqtt`、`protocol` 当前采用上述布局；`app`、`state`、`commands`、`video`、`ui` 有多个文件，保留各自的 `include/` 和 `src/`。手写 C++ 头文件统一使用 `.hpp`，模块通过 CMake 导出自己的头文件路径，引用仍统一写成 `#include "TerminalConfig.hpp"`。Protobuf 生成的 C++ 文件保留在该模块的构建目录，测试仍放在 `tests/`。
 
-依赖关系：`config → core`，`mqtt → config`，`state → core/protocol`，`commands → state/mqtt`，`app → config/protocol/mqtt/state/commands/video`，`cli → app`。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
+依赖关系：`config → core`，`mqtt → config`，`state → core/protocol`，`commands → state/mqtt`，`app → config/protocol/mqtt/state/commands/video`，`cli → app`。桌面依赖为 `desktop → ui → app / Qt Quick`，展示适配读取现有类型化状态，后端不依赖 UI。各模块对应独立的 `ly27_<模块>` 构建目标；根 CMake 只组织模块和公共设置。
 
 后端仍可无显示环境运行。未来桌面入口复用同一个后端，窗口不拥有通信和业务生命周期。构建产物、日志、个人配置和本机依赖路径不提交。

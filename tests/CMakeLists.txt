@@ -51,3 +51,11 @@ target_compile_definitions(test_reconfiguration PRIVATE LY27_CLI_PATH="$<TARGET_
 add_dependencies(test_reconfiguration ly27_cli)
 add_test(NAME reconfiguration COMMAND test_reconfiguration)
 set_tests_properties(reconfiguration PROPERTIES TIMEOUT 40)
+
+if(LY27_BUILD_DESKTOP)
+    add_executable(test_desktop test_desktop.cpp)
+    target_link_libraries(test_desktop PRIVATE ly27_ui Qt6::Test)
+    add_test(NAME desktop COMMAND test_desktop)
+    set_tests_properties(desktop PROPERTIES TIMEOUT 30
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+endif()
