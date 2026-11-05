@@ -37,6 +37,61 @@ QQuickItem *item(QQuickItem *root, const QString &name)
 class DesktopTest : public QObject {
     Q_OBJECT
 private slots:
+    void mapFacilityHealthAndPerspective()
+    {
+        qint64 now = 1000000000;
+        ly27::StateStore store(identity(ly27::Team::Blue), nullptr, [&now] { return now; });
+        store.reset("facilities"); store.setConnected(true);
+        ly27::TerminalViewModel model(store, identity(ly27::Team::Blue), "红方", "蓝方");
+        ly27::MapWindow window(&model);
+        QCOMPARE(window.status(), QQuickView::Ready);
+        window.show();
+        auto *root = window.rootObject();
+        QVERIFY(QDir().mkpath("test-artifacts"));
+        ly27::wire::GlobalUnitStatus units;
+        units.set_base_health(6789); units.set_enemy_base_health(8321);
+        units.set_outpost_r_health(765); units.set_outpost_b_health(0);
+        QVERIFY(send(store, units, now));
+        const QStringList names{"RedBase", "BlueBase", "ROutpost", "BOutpost"};
+        const QStringList expected{"8321", "6789", "765", "0"};
+        const QPointF centers[] = {{171, 461}, {1514, 464}, {667, 685}, {1028, 237}};
+        for (const bool blueView : {false, true}) {
+            model.setBlueView(blueView);
+            for (const QSize size : {QSize(1920, 1080), QSize(1280, 800), QSize(640, 900), QSize(640, 480)}) {
+                window.resize(size); QTest::qWait(200);
+                auto *layer = item(root, "mapMarkerLayer");
+                QVERIFY(layer);
+                for (int i = 0; i < names.size(); ++i) {
+                    auto *facility = item(root, "map" + names[i]);
+                    QVERIFY(facility);
+                    auto *caption = item(facility, "facilityMapCaption");
+                    auto *value = item(facility, "facilityMapHealthValue");
+                    QVERIFY(caption && value);
+                    QCOMPARE(value->property("text").toString(), expected[i]);
+                    const double u = centers[i].x() / 1662, v = centers[i].y() / 946;
+                    QVERIFY(qAbs(facility->x() - (blueView ? 1 - u : u) * layer->width()) < 0.5);
+                    QVERIFY(qAbs(facility->y() - (blueView ? 1 - v : v) * layer->height()) < 0.5);
+                    const auto bounds = caption->mapRectToItem(layer, QRectF(QPointF(), caption->size()));
+                    QVERIFY(QRectF(0, 0, layer->width(), layer->height()).contains(bounds));
+                    QVERIFY(bounds.bottom() <= facility->y() - facility->property("footprintRadius").toReal() + 0.5);
+                    QVERIFY(!value->property("truncated").toBool());
+                }
+                QVERIFY(window.grabWindow().save(QString("test-artifacts/facilities-%1-%2x%3.png")
+                    .arg(blueView ? "blue" : "red").arg(size.width()).arg(size.height())));
+            }
+        }
+        units.set_base_health(0); units.clear_enemy_base_health();
+        units.clear_outpost_r_health(); units.set_outpost_b_health(1000);
+        QVERIFY(send(store, units, now));
+        QCOMPARE(item(item(root, "mapBlueBase"), "facilityMapHealthValue")->property("text").toString(), QString("0"));
+        QCOMPARE(item(item(root, "mapRedBase"), "facilityMapHealthValue")->property("text").toString(), QString("—"));
+        QCOMPARE(item(item(root, "mapROutpost"), "facilityMapHealthValue")->property("text").toString(), QString("—"));
+        QCOMPARE(item(item(root, "mapBOutpost"), "facilityMapHealthValue")->property("text").toString(), QString("1000"));
+        now += 3100000000LL; model.refresh();
+        QCOMPARE(item(item(root, "mapBOutpost"), "facilityMapHealthValue")->property("text").toString(), QString("—"));
+        window.setSource(QUrl());
+    }
+
     void hudLayoutAndHealthBars()
     {
         qint64 now = 1000000000;
@@ -67,6 +122,12 @@ private slots:
             stat.set_robot_id(ids[row]); stat.set_level(row + 1); stat.set_max_health(600);
             QVERIFY(send(store, stat, now));
         }
+        const QList<QPair<int, QString>> notices{{1, "1,101"}, {2, "111"}, {5, "2"}, {6, "4"},
+            {9, "1,3"}, {11, ""}, {15, "7"}, {16, ""}};
+        for (const auto &notice : notices) {
+            ly27::wire::Event event; event.set_event_id(notice.first); event.set_param(notice.second.toStdString());
+            QVERIFY(send(store, event, now));
+        }
         ly27::MapWindow window(&model);
         QCOMPARE(window.status(), QQuickView::Ready);
         window.show();
@@ -80,6 +141,14 @@ private slots:
             window.resize(size);
             QTest::qWait(220);
             const auto header = rect(item(root, "matchHeader"));
+            auto *panel = item(root, "eventPanel");
+            auto *mapArea = item(root, "mapArea");
+            auto *events = item(root, "eventList");
+            QVERIFY(panel && mapArea && events);
+            QVERIFY(rect(panel).right() <= rect(mapArea).left());
+            QVERIFY(rect(panel).bottom() <= window.height() - 36);
+            QCOMPARE(events->property("count").toInt(), 8);
+            QTRY_VERIFY(events->property("atYEnd").toBool());
             for (int a = 0; a < names.size(); ++a) {
                 auto *text = item(root, names[a]);
                 QVERIFY(text);
@@ -140,6 +209,7 @@ private slots:
             QVERIFY(value);
             QTRY_COMPARE(value->property("text").toString(), expected[i]);
             QVERIFY(value->property("contentWidth").toReal() <= value->width() + 1);
+            QVERIFY(!value->property("truncated").toBool());
         }
         QVERIFY(!item(root, "blueDefenseIcon")->isVisible());
         QCOMPARE(item(root, "blueBaseStatusText")->property("text").toString(), QString("基地已摧毁"));

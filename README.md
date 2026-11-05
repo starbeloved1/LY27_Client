@@ -56,7 +56,7 @@ cmake --build --preset local-dev --target ly27_desktop --parallel 2
 ./启动终端.sh --mqtt --red-team "红方队名" --blue-team "蓝方队名"
 ```
 
-可用 `--config config/terminal.local.json` 指定个人配置；默认读取可执行文件旁的 `config/terminal.example.json`。队名为本地显示参数，当前协议没有上报队名。桌面入口创建并管理同一个 `TerminalRuntime`，默认关闭图传。顶部包含局数、比分、阶段计时、双方基地和固定 R/B 前哨站血量，下方显示我方实时经济及双方累计控制度；地图显示八台地面机器人的位置、等级与血量，右下角可切换红蓝视角。显示策略与模拟器联调方法见 [地图联调说明](docs/map-testing.md)。
+可用 `--config config/terminal.local.json` 指定个人配置；默认读取可执行文件旁的 `config/terminal.example.json`。队名为本地显示参数，当前协议没有上报队名。桌面入口创建并管理同一个 `TerminalRuntime`，默认关闭图传。顶部包含局数、比分、阶段计时、双方基地和固定 R/B 前哨站血量，下方显示我方实时经济及双方累计控制度；地图显示八台地面机器人的位置、等级与血量，并在两侧基地和两座前哨站上方同步显示建筑血量，左侧增加战场事件侧栏，保留最近 50 条，按时间追加并自动滚动；右下角可切换红蓝视角。事件逻辑见 [事件说明](docs/events-notes.md)。显示策略与模拟器联调方法见 [地图联调说明](docs/map-testing.md)。
 
 入口为 `apps/desktop/src/main.cpp`，窗口与 C++ 展示适配位于 `modules/ui/include/`、`src/`，QML 和图片位于 `modules/ui/resources/`。底图保持比例，标记跟随实际图片区域缩放。
 

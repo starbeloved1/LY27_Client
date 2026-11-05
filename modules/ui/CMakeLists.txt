@@ -2,9 +2,11 @@ add_library(ly27_ui STATIC
     include/MapWindow.hpp
     include/TerminalViewModel.hpp
     include/RobotMapModel.hpp
+    include/EventListModel.hpp
     src/MapWindow.cpp
     src/TerminalViewModel.cpp
     src/RobotMapModel.cpp
+    src/EventListModel.cpp
 )
 target_include_directories(ly27_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(ly27_ui PUBLIC Qt6::Quick ly27_app)
@@ -16,6 +18,8 @@ qt_add_resources(ly27_ui ly27_ui_resources
     FILES
         resources/BaseHealthBar.qml
         resources/BaseHealthWing.qml
+        resources/EventPanel.qml
+        resources/FacilityMapMarker.qml
         resources/Map.qml
         resources/MatchHeader.qml
         resources/MatchResources.qml

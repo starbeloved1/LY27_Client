@@ -16,9 +16,10 @@ Rectangle {
     }
     Item {
         id: mapArea
+        objectName: "mapArea"
         anchors.top: header.bottom
         anchors.bottom: footer.top
-        anchors.left: parent.left
+        anchors.left: events.right
         anchors.right: parent.right
         clip: true
         Image {
@@ -73,7 +74,37 @@ Rectangle {
                     Behavior on y { enabled: positionFresh && !root.flipping; NumberAnimation { duration: 85 } }
                 }
             }
+            Repeater {
+                // 对应底图 1662 × 946 中的设施中心；两端中部为基地，河道两侧的小圆塔为前哨站。
+                model: [
+                    {key: "RedBase", label: "红方基地", field: "redBaseHp", blue: false, px: 171, py: 461, radius: 62, maximum: 10000},
+                    {key: "BlueBase", label: "蓝方基地", field: "blueBaseHp", blue: true, px: 1514, py: 464, radius: 62, maximum: 10000},
+                    {key: "ROutpost", label: "R 前哨站", field: "rOutpostHp", blue: false, px: 667, py: 685, radius: 30, maximum: 1000},
+                    {key: "BOutpost", label: "B 前哨站", field: "bOutpostHp", blue: true, px: 1028, py: 237, radius: 30, maximum: 1000}
+                ]
+                delegate: FacilityMapMarker {
+                    required property var modelData
+                    objectName: "map" + modelData.key
+                    x: (root.blueView ? 1 - modelData.px / 1662 : modelData.px / 1662) * markerLayer.width
+                    y: (root.blueView ? 1 - modelData.py / 946 : modelData.py / 946) * markerLayer.height
+                    label: modelData.label
+                    blue: modelData.blue
+                    health: root.viewModel ? (root.viewModel.match[modelData.field] ?? -1) : -1
+                    maximum: modelData.maximum
+                    footprintRadius: modelData.radius / 946 * markerLayer.height
+                    mapWidth: markerLayer.width
+                    mapHeight: markerLayer.height
+                }
+            }
         }
+    }
+    EventPanel {
+        id: events
+        anchors.top: header.bottom
+        anchors.bottom: footer.top
+        anchors.left: parent.left
+        width: Math.round(Math.min(280, Math.max(190, root.width * 0.20)))
+        eventModel: root.viewModel ? root.viewModel.events : null
     }
     property bool flipping: false
     Connections {

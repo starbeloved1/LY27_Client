@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RobotMapModel.hpp"
+#include "EventListModel.hpp"
 #include <QObject>
 #include <QTimer>
 #include <QVariantMap>
@@ -11,12 +12,14 @@ class TerminalViewModel final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap match READ match NOTIFY changed)
     Q_PROPERTY(QAbstractItemModel *robots READ robots CONSTANT)
+    Q_PROPERTY(QAbstractItemModel *events READ events CONSTANT)
     Q_PROPERTY(bool blueView READ blueView WRITE setBlueView NOTIFY blueViewChanged)
 public:
     TerminalViewModel(const StateStore &store, TerminalIdentity identity,
                       QString redTeam, QString blueTeam, QObject *parent = nullptr);
     QVariantMap match() const { return m_match; }
     QAbstractItemModel *robots() { return &m_robots; }
+    QAbstractItemModel *events() { return &m_events; }
     bool blueView() const { return m_blueView; }
     void setBlueView(bool value);
     void refresh();
@@ -33,6 +36,7 @@ private:
     bool m_blueView = false;
     QVariantMap m_match;
     RobotMapModel m_robots;
+    EventListModel m_events;
     QTimer m_timer{this};
 };
 

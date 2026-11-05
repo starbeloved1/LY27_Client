@@ -54,7 +54,8 @@ Item {
         anchors.rightMargin: Math.round(24 * root.contentScale)
         anchors.bottom: hpBar.top
         anchors.bottomMargin: Math.round(2 * root.contentScale)
-        width: Math.round(32 * root.contentScale)
+        // 给四位血量留足宽度，避免默认字体加粗后把 1000 截成省略号。
+        width: Math.round(40 * root.contentScale)
         objectName: "outpostHealthValue"
         text: root.hp >= 0 ? root.hp.toString() : "—"
         color: root.destroyed ? "#D4D7DC" : "#FFFFFF"

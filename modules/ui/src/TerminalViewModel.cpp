@@ -40,7 +40,8 @@ TerminalViewModel::TerminalViewModel(const StateStore &store, TerminalIdentity i
                                    QString redTeam, QString blueTeam, QObject *parent)
     : QObject(parent), m_store(store), m_identity(std::move(identity)),
       m_redTeam(std::move(redTeam)), m_blueTeam(std::move(blueTeam)),
-      m_blueView(m_identity.team == Team::Blue), m_robots(store, m_identity, this)
+      m_blueView(m_identity.team == Team::Blue), m_robots(store, m_identity, this),
+      m_events(store, m_identity.team, this)
 {
     connect(&store, &StateStore::changed, this, [this](const QString &) { refresh(); });
     connect(&m_timer, &QTimer::timeout, this, &TerminalViewModel::refresh);

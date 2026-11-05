@@ -4,10 +4,13 @@
 
 - 顶部：双方队名、局数/比分、阶段倒计时、暂停提示、双方基地血量、固定 R/B 前哨站血量。队名来自 `--red-team`、`--blue-team` 本地参数；未知数据显示“—”。基地血条暂按 10000、前哨站按 1000 显示，当前数值使用服务器数据。完整侧翼组合 `BaseHealthWing.qml` 参考 RM26 的同名组合移植，包含基地双层血条、R 队徽、状态行、护盾图标及前哨站卡片，按新赛季上限显示，不带入旧重建次数。基地状态 0 才显示 100% 防御图标和金边，状态 1/2 分别显示护甲未展开/展开；未收到或过期显示状态未知，基地摧毁后取消护盾表现。右上 DATA 灯表示比赛计时数据是否新鲜。BO 在服务器未给总局数时默认显示 BO3，具体局次和比分不补默认值。
 - 地图：红蓝双方 1/3/4/7 共八台地面机器人的位置、朝向、等级、当前血量和血条。血量条内居中显示数值，等级独立放在左侧；缺少最大血量时只显示数值，不画假满条。本机使用绿色图标，其他机器人使用阵营颜色。等级与血量不通过坐标消息推断；来自静态属性和全局血量状态。
+- 设施：地图两侧中部的红蓝基地、中央道路旁的 R/B 前哨站上方显示名称、当前血量与血条，直接复用顶部状态字段。标记按原图像素中心归一化定位，随实际图片区域缩放和视角镜像；未知/过期显示“—”，零血量显示 0。图片左上/右下的大 R 标志不作为基地或前哨站。
 - 视角：右下角切换红蓝地图视角，只影响展示；图片旋转 180°，机器人同步镜像，文字保持正向，通信身份不变。
 - 数据有效性：没有位置不画图标；位置超过三个发送周期（目前 3 秒）后淡化，满 5 秒隐藏。断线、换局、旧连接数据和 retained 位置不显示；血量与等级过期显示“—”，不以零代替未知。零血量正常显示 0，不擅自解释为存活枚举。
 
 地图坐标沿用 RM26 的左下角原点习惯，暂按 28 × 15 m 投影到图片围挡内近似范围 `(24,24)–(1638,921)`；图标跟随 `Image.paintedWidth/paintedHeight`，不把留白算进场地。底图经过 AI 重建，这只是显示标定，实机前仍需用已知点核对场地坐标方向、范围和设施位置。
+
+左侧战场事件侧栏与地图分开布局，不遮挡场地。事件显示规则与模拟器用法见 [事件说明](events-notes.md)。
 
 ## 经济和累计控制度
 
@@ -37,7 +40,7 @@ cd LY27_Client
 
 ## 兼容边界
 
-兼容逻辑仅位于 RM26 的模拟器；默认 `rm2026` 保持原路径，显式 `rm2027` 才输出 `GameStatus`、`GlobalUnitStatus`、`GlobalLogisticsStatus`、`RobotStaticStatus` 和 `RobotPosition`。LY27 的协议、Topic、反序列化和状态模块不加入旧协议判断。
+兼容逻辑仅位于 RM26 的模拟器；默认 `rm2026` 保持原路径，显式 `rm2027` 才输出 `GameStatus`、`GlobalUnitStatus`、`GlobalLogisticsStatus`、`RobotStaticStatus`、`RobotPosition` 和 `Event`。LY27 的协议、Topic、反序列化和状态模块不加入旧协议判断。
 
 为测试八台机器人的显示，模拟器以 10 Hz 给每个 ID 发送 `RobotPosition`，并每秒给全部 ID 发送静态属性。这是测试输入约定，不表示官方服务器会给任意身份实时推送全场位置/属性。官方 `RobotPosition` 标注 1 Hz，具体身份权限和位置覆盖仍需真实服务器确认。
 
@@ -47,6 +50,6 @@ cd LY27_Client
 
 `MQTT → MessageCodec → StateStore → TerminalViewModel / RobotMapModel → QML`。
 
-`apps/desktop/src/main.cpp` 管理配置、日志与运行生命周期；`modules/ui/src/TerminalViewModel.cpp` 适配比赛/设施信息，`RobotMapModel.cpp` 提供八行地图模型；`Map.qml` 组合底图、顶部和标记，`MatchHeader.qml`、`MatchResources.qml`、`BaseHealthWing.qml`、`BaseHealthBar.qml`、`OutpostStatusBadge.qml`、`RobotMarker.qml` 分别负责具体显示。UI 不解析原始协议，不另建通信对象。
+`apps/desktop/src/main.cpp` 管理配置、日志与运行生命周期；`modules/ui/src/TerminalViewModel.cpp` 适配比赛/设施信息，`RobotMapModel.cpp` 提供八行地图模型；`Map.qml` 组合底图、顶部和标记，`FacilityMapMarker.qml` 显示地图建筑血量，`MatchHeader.qml`、`MatchResources.qml`、`BaseHealthWing.qml`、`BaseHealthBar.qml`、`OutpostStatusBadge.qml`、`RobotMarker.qml` 分别负责具体显示。UI 不解析原始协议，不另建通信对象。
 
 测试包含八个 ID 的分发、零值/缺失、蓝方全局映射、镜像、过期/断线/重连/换局，以及五种窗口尺寸下的 QML 渲染、顶部文字边界/重叠、条内数字、血条比例和实际图片范围。测试截图位于构建目录 `tests/test-artifacts/hud-*.png`。另使用真实本地 Broker 和模拟器 Web 命令验证位置、等级和血量穿过完整链路。尚未通过官方赛事系统验证。
