@@ -308,8 +308,24 @@ std::optional<RobotState> StateStore::robot(int robotId) const
     result.performance.shooter = choose(selection.shooter, result.performance.shooter);
     result.performance.chassis = choose(selection.chassis, result.performance.chassis);
     result.performance.sentryControl = selection.sentryControl;
+    result.buffs = buffs(robotId);
+    sample = records.value("CustomByteBlock");
+    if (const auto *p = dynamic_cast<const wire::CustomByteBlock *>(sample.message.get()))
+        result.customData = field(p->has_data(), QByteArray::fromStdString(p->data()), source(sample, now));
+    result.healthRatio = ratio(result.currentHealth, result.maxHealth);
+    result.heatRatio = ratio(result.currentHeat, result.maxHeat);
+    result.respawn.progressRatio = ratio(result.respawn.currentProgress, result.respawn.totalProgress);
+    return result;
+}
+
+QMap<BuffType, BuffState> StateStore::buffs(int entityId) const
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    const auto now = m_clock();
+    const auto records = m_facilityBuffs.contains(entityId) ? m_facilityBuffs.value(entityId) : m_robots.value(entityId);
+    QMap<BuffType, BuffState> result;
     for (int type = 1; type <= 7; ++type) {
-        sample = records.value("Buff/" + QString::number(type));
+        const auto sample = records.value("Buff/" + QString::number(type));
         const auto *p = dynamic_cast<const wire::Buff *>(sample.message.get());
         if (!p) continue;
         const auto s = source(sample, now);
@@ -319,14 +335,8 @@ std::optional<RobotState> StateStore::robot(int robotId) const
         buff.level = field(p->has_buff_level(), p->buff_level(), s);
         buff.maximumSeconds = field(p->has_buff_max_time(), p->buff_max_time(), s);
         buff.reportedRemainingSeconds = field(p->has_buff_left_time(), p->buff_left_time(), s);
-        result.buffs.insert(static_cast<BuffType>(type), buff);
+        result.insert(static_cast<BuffType>(type), buff);
     }
-    sample = records.value("CustomByteBlock");
-    if (const auto *p = dynamic_cast<const wire::CustomByteBlock *>(sample.message.get()))
-        result.customData = field(p->has_data(), QByteArray::fromStdString(p->data()), source(sample, now));
-    result.healthRatio = ratio(result.currentHealth, result.maxHealth);
-    result.heatRatio = ratio(result.currentHeat, result.maxHeat);
-    result.respawn.progressRatio = ratio(result.respawn.currentProgress, result.respawn.totalProgress);
     return result;
 }
 

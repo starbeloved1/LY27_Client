@@ -12,7 +12,7 @@ class RobotMapModel final : public QAbstractListModel {
 public:
     enum Role {
         RobotId = Qt::UserRole + 1, Number, Blue, Self, MapX, MapY, Heading,
-        PositionKnown, PositionFresh, HpText, LevelText, HpKnown, HpRatio
+        PositionKnown, PositionFresh, HpText, LevelText, HpKnown, HpRatio, Buffs
     };
     explicit RobotMapModel(const StateStore &store, const TerminalIdentity &identity,
                            QObject *parent = nullptr);

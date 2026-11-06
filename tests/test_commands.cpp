@@ -249,6 +249,35 @@ private slots:
         request.receivers = {4}; QCOMPARE(f.commands.map(request).code, QString("role_denied"));
     }
 
+    void commanderAddressedBroadcastAndEntityTargets()
+    {
+        for (auto team : {ly27::Team::Red, ly27::Team::Blue}) {
+            Fixture f(ly27::Role::Commander, team);
+            QVERIFY(f.start(network(), {"MapClickCmd"})); QTRY_VERIFY_WITH_TIMEOUT(f.ready(), 5000);
+            const int own = team == ly27::Team::Red ? 0 : 100, enemy = own ? 0 : 100;
+            ly27::MapRequest r; r.range = ly27::MapSendRange::ExceptSentry; r.receivers = {own + 3};
+            int count = 0;
+            for (auto target : {QPair<int, ly27::MapMarker>{own + 4, ly27::MapMarker::Defense},
+                 {own + 10, ly27::MapMarker::Defense}, {own + 11, ly27::MapMarker::Defense},
+                 {enemy + 10, ly27::MapMarker::Attack}, {enemy + 11, ly27::MapMarker::Attack},
+                 {enemy + 3, ly27::MapMarker::Warning}}) {
+                r.target = ly27::MapEntity{target.first}; r.marker = target.second;
+                QVERIFY(f.commands.map(r).accepted); ++count; QTRY_COMPARE(f.received.count(), count);
+                ly27::wire::MapClickCmd m;
+                QVERIFY(m.ParseFromString(f.received.last()[1].toByteArray().toStdString()));
+                QCOMPARE(m.is_send_all(), 1u); QCOMPARE(m.type(), 2u); QCOMPARE(m.enemy_id(), quint32(target.first));
+                QCOMPARE(m.robot_id().size(), size_t(7)); QCOMPARE(quint8(m.robot_id()[0]), quint8(own + 3));
+                QCOMPARE(m.map_x(), 0.f); QCOMPARE(m.map_y(), 0.f); QVERIFY(!m.has_ascii());
+                f.now += 500000000;
+            }
+            r.target = ly27::MapEntity{own + 4}; r.marker = ly27::MapMarker::Attack;
+            QCOMPARE(f.commands.map(r).code, QString("invalid_argument"));
+            r.target = ly27::MapEntity{9}; QCOMPARE(f.commands.map(r).code, QString("invalid_argument"));
+            r.target = ly27::MapPosition{1, 2}; r.receivers = {enemy + 3};
+            QCOMPARE(f.commands.map(r).code, QString("invalid_argument"));
+        }
+    }
+
     void jsonBoundaryRejectsInvalidTypesAndUnknownFields()
     {
         const QList<QByteArray> invalid = {

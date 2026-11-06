@@ -4,6 +4,7 @@
 
 #include <QDir>
 #include <QGuiApplication>
+#include <QPointer>
 #include <QQuickItem>
 #include <QtTest>
 
@@ -213,6 +214,61 @@ private slots:
         s.store.setConnected(false); QCOMPARE(s.kind(), QString("none"));
         s.store.setConnected(true); QCOMPARE(s.kind(), QString("none"));
     }
+    void victoryAnimationRequiresLiveTransition()
+    {
+        Scene s;
+        auto *overlay = s.get("matchPhaseOverlay"); QVERIFY(overlay);
+        auto g = game(5); g.set_game_result(1);
+        QVERIFY(s.send(g));
+        QVERIFY(!s.model.phase()["animateVictory"].toBool());
+        QCOMPARE(overlay->property("frame").toInt(), 33);
+        QTest::qWait(100); QCOMPARE(overlay->property("frame").toInt(), 33);
+
+        // 重启进入等待结算，随后才收到胜者，也只静态恢复战报。
+        s.store.reset("startup-settlement");
+        s.store.setConnected(true);
+        g.set_game_result(255); QVERIFY(s.send(g));
+        g.set_game_result(2); QVERIFY(s.send(g));
+        QVERIFY(!s.model.phase()["animateVictory"].toBool());
+        QCOMPARE(overlay->property("frame").toInt(), 33);
+
+        // 本次连接见证比赛结束，允许动画；周期上报和刷新不重新从零播放。
+        g.set_current_stage(4); QVERIFY(s.send(g));
+        g.set_current_stage(5); g.set_game_result(255); QVERIFY(s.send(g));
+        g.set_game_result(1); QVERIFY(s.send(g));
+        QVERIFY(s.model.phase()["animateVictory"].toBool());
+        QCOMPARE(overlay->property("frame").toInt(), 0);
+        QTRY_VERIFY(overlay->property("frame").toInt() > 0);
+        const int frame = overlay->property("frame").toInt();
+        QVERIFY(s.send(g)); s.model.refresh();
+        QCOMPARE(overlay->property("frame").toInt(), frame);
+        QTRY_COMPARE(overlay->property("frame").toInt(), 33);
+        QVERIFY(s.send(g)); QCOMPARE(overlay->property("frame").toInt(), 33);
+
+        g.set_current_stage(4); QVERIFY(s.send(g));
+        s.store.setConnected(false); s.store.setConnected(true);
+        g.set_current_stage(5); QVERIFY(s.send(g));
+        QVERIFY(!s.model.phase()["animateVictory"].toBool());
+        QCOMPARE(overlay->property("frame").toInt(), 33);
+
+        // retained、过期、跨局和跨会话的比赛状态均不能提供播放资格。
+        g.set_current_stage(4); QVERIFY(s.send(g, true));
+        g.set_current_stage(5); QVERIFY(s.send(g));
+        QVERIFY(!s.model.phase()["animateVictory"].toBool());
+        g.set_current_stage(4); QVERIFY(s.send(g));
+        s.now += 700000000; s.model.refresh();
+        g.set_current_stage(5); QVERIFY(s.send(g));
+        QVERIFY(!s.model.phase()["animateVictory"].toBool());
+        g.set_current_stage(4); QVERIFY(s.send(g));
+        g.set_current_stage(5); g.set_current_round(2); QVERIFY(s.send(g));
+        QVERIFY(!s.model.phase()["animateVictory"].toBool());
+        g.set_current_stage(4); QVERIFY(s.send(g));
+        s.store.reset("new-victory-session");
+        s.store.setConnected(true);
+        g.set_current_stage(5); QVERIFY(s.send(g));
+        QVERIFY(!s.model.phase()["animateVictory"].toBool());
+        QCOMPARE(overlay->property("frame").toInt(), 33);
+    }
     void resultsReasonsDismissalAndRoundIsolation()
     {
         Scene s;
@@ -250,6 +306,44 @@ private slots:
         g.set_game_result(1); g.set_end_reason(7); QVERIFY(s.send(g));
         QCOMPARE(s.model.phase().value("description").toString(), QString("主裁判手动判定胜负"));
         s.store.reset("next-session"); QCOMPARE(s.kind(), QString("none"));
+    }
+    void mechanismCardsSurviveStatusAndCountdownUpdates()
+    {
+        Scene s; auto g = game(4); QVERIFY(s.send(g));
+        ly27::wire::GlobalSpecialMechanism m;
+        m.add_mechanism_id(3); m.add_mechanism_time_sec(5); QVERIFY(s.send(m));
+        QPointer<QQuickItem> card = s.get("mechanismNotice3");
+        QVERIFY(card && card->isVisible());
+        // 无关状态刷新、重复包和秒数变化都不能销毁面板及其 Canvas。
+        ly27::wire::GlobalUnitStatus u;
+        for (int n = 0; n < 20; ++n) {
+            u.set_total_cp_ally(n); QVERIFY(s.send(u));
+            s.model.refresh(); QTest::qWait(5);
+            QVERIFY2(card, "无关状态更新销毁了阵地倒计时面板");
+            QCOMPARE(s.get("mechanismNotice3"), card.data());
+        }
+        QVERIFY(s.send(m)); QTest::qWait(5); QVERIFY(card);
+        for (int seconds = 4; seconds > 0; --seconds) {
+            m.set_mechanism_time_sec(0, seconds); QVERIFY(s.send(m));
+            QTest::qWait(20);
+            QVERIFY2(card, "倒计时变化销毁了阵地提示面板");
+            QCOMPARE(s.get("mechanismNotice3"), card.data());
+            QCOMPARE(item(card, "mechanismMessage")->property("text").toString(),
+                     QStringLiteral("己方还有 %1 秒").arg(seconds));
+        }
+        // 排序、新增和移除提示只更新现有槽位，不重建控件。
+        m.add_mechanism_id(4); m.add_mechanism_time_sec(-2); QVERIFY(s.send(m));
+        QPointer<QQuickItem> second = s.get("mechanismNotice4"); QVERIFY(second);
+        m.set_mechanism_time_sec(0, 5); QVERIFY(s.send(m));
+        QTest::qWait(20); QVERIFY(card && second);
+        QVERIFY(s.get("mechanismNotice4")->isVisible());
+        m.Clear(); QVERIFY(s.send(m));
+        QTest::qWait(20); QVERIFY(card && second);
+        QVERIFY(!s.get("mechanismNotices")->isVisible());
+        m.add_mechanism_id(3); m.add_mechanism_time_sec(3); QVERIFY(s.send(m));
+        QVERIFY(s.get("mechanismNotice3")->isVisible());
+        QVERIFY(card && second);
+        QVERIFY(s.screenshot("mechanisms-stable-update"));
     }
     void signedMechanismsClearPauseAndExpiration()
     {

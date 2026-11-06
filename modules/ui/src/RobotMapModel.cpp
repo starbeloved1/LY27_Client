@@ -1,4 +1,5 @@
 #include "RobotMapModel.hpp"
+#include "BuffPresentation.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -29,7 +30,7 @@ QHash<int, QByteArray> RobotMapModel::roleNames() const
             {Self, "isSelf"}, {MapX, "mapX"}, {MapY, "mapY"}, {Heading, "heading"},
             {PositionKnown, "positionKnown"}, {PositionFresh, "positionFresh"},
             {HpText, "hpText"}, {LevelText, "levelText"}, {HpKnown, "hpKnown"},
-            {HpRatio, "hpRatio"}};
+            {HpRatio, "hpRatio"}, {Buffs, "activeBuffs"}};
 }
 
 QPointF RobotMapModel::projectPosition(double x, double y, bool blueView)
@@ -52,8 +53,9 @@ void RobotMapModel::refresh(bool blueView)
                            {"mapX", 0.0}, {"mapY", 0.0}, {"heading", 0.0},
                            {"positionKnown", false}, {"positionFresh", false},
                            {"hpText", QStringLiteral("—")}, {"levelText", QStringLiteral("Lv.—")},
-                           {"hpKnown", false}, {"hpRatio", -1.0}};
+                           {"hpKnown", false}, {"hpRatio", -1.0}, {"activeBuffs", QVariantList{}}};
         if (robot) {
+            values["activeBuffs"] = mapBuffs(robot->buffs);
             const auto &position = robot->position;
             const auto &source = position.x.source;
             // 过期位置短暂保留并淡化，断线、换局、retained 和超过五秒的位置不画。

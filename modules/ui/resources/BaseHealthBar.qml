@@ -2,7 +2,7 @@
  * @file BaseHealthBar.qml
  * @brief 基地血量条 QML 组件
  * @details 按官方样式实现:
- *          - 双层血条，视觉与动画沿用 RM26，容量跟随当前赛季上限
+ *          - 沿用 RM26 素材，填充长度统一表示当前血量占上限的比例
  *          - 扣血追血段
  *          - 低血量呼吸暗化
  */
@@ -16,35 +16,22 @@ Item {
     property int maxHealth: 10000
     property bool isBlue: false
     property bool showHealthText: true
-    property int deepLayerHealth: Math.round(maxHealth * 0.6)
 
     readonly property int safeMaxHealth: Math.max(1, maxHealth)
     readonly property int clampedHealth: Math.max(0, Math.min(safeMaxHealth, currentHealth))
 
-    // 双层容量按 60% / 40% 分配，不沿用旧赛季血量上限
-    readonly property int deepCapacity: Math.max(1, Math.min(deepLayerHealth, safeMaxHealth))
-    readonly property int lightCapacity: Math.max(0, safeMaxHealth - deepCapacity)
-
-    readonly property int deepHealth: Math.min(clampedHealth, deepCapacity)
-    readonly property int lightHealth: Math.max(0, clampedHealth - deepCapacity)
-
     readonly property real healthRatio: clampedHealth / safeMaxHealth
-    readonly property real deepRatio: deepCapacity > 0 ? deepHealth / deepCapacity : 0
-    readonly property real lightRatio: lightCapacity > 0 ? lightHealth / lightCapacity : 0
     readonly property bool lowHealth: healthRatio > 0 && healthRatio < 0.2
 
     // 方向: 红方剩余血量贴近右侧校徽(右锚定), 蓝方剩余血量贴近左侧校徽(左锚定)
-    readonly property real deepFillWidth: width * deepRatio
-    readonly property real lightFillWidth: lightCapacity > 0 ? width * lightRatio : 0
     readonly property real totalFillWidth: width * healthRatio
 
     // 资源映射
     readonly property string depletedSource: isBlue ? "images/blue_base_blood/blue_base_blood_bottom.png" : "images/red_base_blood/red_base_blood_bottom.png"
-    readonly property string deepSource: isBlue ? "images/blue_base_blood/blue_base_blood_middle.png" : "images/red_base_blood/red_base_blood_middle.png"
+    readonly property string frameSource: isBlue ? "images/blue_base_blood/blue_base_blood_middle.png" : "images/red_base_blood/red_base_blood_middle.png"
     readonly property string lightSource: isBlue ? "images/blue_base_blood/blue_base_blood_top.png" : "images/red_base_blood/red_base_blood_top.png"
     readonly property string borderSource: isBlue ? "images/blue_base_blood/blue_base_blood_border.png" : "images/red_base_blood/red_base_blood_border.png"
     readonly property string glowSource: isBlue ? "images/blue_base_blood/blue_base_blood_light.png" : "images/red_base_blood/red_base_blood_light.png"
-    readonly property string deepTrailSource: isBlue ? "images/blue_base_blood/blue_base_blood_middle_full.png" : "images/red_base_blood/red_base_blood_middle_full.png"
     readonly property string lightTrailSource: isBlue ? "images/blue_base_blood/blue_base_blood_top_full.png" : "images/red_base_blood/red_base_blood_top_full.png"
 
     // 扣血追血段: 用 trailHealth 记录动画前值
@@ -52,24 +39,15 @@ Item {
     property real lowHealthPulse: 0
 
     readonly property real trailClampedHealth: Math.max(0, Math.min(safeMaxHealth, trailHealth))
-    readonly property real trailDeepHealth: Math.min(trailClampedHealth, deepCapacity)
-    readonly property real trailLightHealth: Math.max(0, trailClampedHealth - deepCapacity)
-    readonly property real trailDeepRatio: deepCapacity > 0 ? trailDeepHealth / deepCapacity : 0
-    readonly property real trailLightRatio: lightCapacity > 0 ? trailLightHealth / lightCapacity : 0
-
-    readonly property real trailDeepWidth: width * trailDeepRatio
-    readonly property real trailLightWidth: lightCapacity > 0 ? width * trailLightRatio : 0
+    readonly property real trailWidth: width * trailClampedHealth / safeMaxHealth
     property real healthTextInset: Math.min(48, width * 0.15)
     property real healthFontSize: Math.min(22, height * 0.74)
 
-    readonly property real deepTrailDelta: Math.max(0, trailDeepWidth - deepFillWidth)
-    readonly property real lightTrailDelta: Math.max(0, trailLightWidth - lightFillWidth)
-
-    readonly property real deepTrailX: isBlue ? deepFillWidth : (width - trailDeepWidth)
-    readonly property real lightTrailX: isBlue ? lightFillWidth : (width - trailLightWidth)
+    readonly property real trailDelta: Math.max(0, trailWidth - totalFillWidth)
+    readonly property real trailX: isBlue ? totalFillWidth : (width - trailWidth)
 
     onClampedHealthChanged: {
-        if (clampedHealth < trailHealth) {
+        if (currentHealth >= 0 && clampedHealth < trailHealth) {
             trailAnim.stop()
             trailAnim.from = trailHealth
             trailAnim.to = clampedHealth
@@ -107,28 +85,18 @@ Item {
         fillMode: Image.Stretch
     }
 
-    // 第一层血条
-    Item {
-        width: root.deepFillWidth
-        height: root.height
-        clip: true
-        anchors.left: root.isBlue ? parent.left : undefined
-        anchors.right: root.isBlue ? undefined : parent.right
-
-        Image {
-            width: root.width
-            height: root.height
-            source: root.deepSource
-            fillMode: Image.Stretch
-            anchors.left: root.isBlue ? parent.left : undefined
-            anchors.right: root.isBlue ? undefined : parent.right
-        }
+    // 深色素材是完整血槽，始终保留满宽，不参与剩余血量裁切。
+    Image {
+        objectName: "baseHealthFrame"
+        anchors.fill: parent
+        source: root.frameSource
+        fillMode: Image.Stretch
     }
 
-    // 第二层血条，覆盖在深层之上
+    // 只有亮色填充代表剩余血量，红蓝两侧均按总血量比例裁切。
     Item {
-        visible: root.lightCapacity > 0
-        width: root.lightFillWidth
+        objectName: "baseHealthFill"
+        width: root.totalFillWidth
         height: root.height
         clip: true
         anchors.left: root.isBlue ? parent.left : undefined
@@ -144,27 +112,12 @@ Item {
         }
     }
 
-    // 第一层追血段
+    // 扣血后的短暂追血段与主血条使用相同的总血量刻度。
     Item {
-        visible: root.deepTrailDelta > 0.5
-        x: root.deepTrailX
-        width: root.deepTrailDelta
-        height: root.height
-        clip: true
-        opacity: 0.65
-
-        Image {
-            anchors.fill: parent
-            source: root.deepTrailSource
-            fillMode: Image.Stretch
-        }
-    }
-
-    // 第二层追血段
-    Item {
-        visible: root.lightTrailDelta > 0.5
-        x: root.lightTrailX
-        width: root.lightTrailDelta
+        objectName: "baseHealthTrail"
+        visible: root.currentHealth >= 0 && root.trailDelta > 0.5
+        x: root.trailX
+        width: root.trailDelta
         height: root.height
         clip: true
         opacity: 0.75

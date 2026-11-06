@@ -1,6 +1,6 @@
 import QtQuick
 
-// 移植 RM26 的完整基地侧翼组合：前哨卡片、双层血条、队徽、队名与状态行。
+// 基地侧翼组合：基地血条、队徽、队名与状态行；前哨站仅在地图显示。
 Item {
     id: root
     property bool blue: false
@@ -9,13 +9,10 @@ Item {
     property int hp: -1
     property int baseState: -1
     property string statusText: "状态未知"
-    property int outpostHp: -1
     readonly property string prefix: blue ? "blue" : "red"
     readonly property real logoSize: compact ? 64 : 76
-    readonly property real outpostWidth: compact ? 92 : 120
-    readonly property real gap: compact ? 10 : 20
-    readonly property real barX: blue ? 0 : outpostWidth + gap
-    readonly property real barWidth: width - outpostWidth - gap
+    readonly property real barX: 0
+    readonly property real barWidth: width
     readonly property real barY: compact ? 29 : 28
     readonly property real barHeight: compact ? 30 : 34
 
@@ -82,22 +79,5 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
-    }
-    OutpostStatusBadge {
-        id: outpost
-        objectName: root.prefix + "OutpostHealth"
-        x: root.blue ? root.width - width : 0
-        y: root.compact ? 10 : 14
-        width: root.outpostWidth
-        height: width * 52 / 92
-        isBlue: root.blue
-        hp: root.outpostHp
-    }
-    Text {
-        x: outpost.x; y: outpost.y + outpost.height
-        width: outpost.width; height: root.compact ? 14 : 16
-        text: root.blue ? "B 前哨站" : "R 前哨站"
-        horizontalAlignment: Text.AlignHCenter
-        color: "#8d9ba7"; font.pixelSize: root.compact ? 10 : 12
     }
 }

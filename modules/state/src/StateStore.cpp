@@ -99,6 +99,7 @@ void StateStore::clearSamples()
 {
     m_topics.clear();
     m_robots.clear();
+    m_facilityBuffs.clear();
     m_history.clear();
     for (const auto &name : MessageCodec::inboundTopics()) {
         Sample sample;
@@ -184,11 +185,15 @@ bool StateStore::apply(const DecodedMessage &message, qint64 utcMs, qint64 monot
         sample.robotId = position->has_robot_id() ? robotNumber(position->robot_id()) : m_identity.robotId;
     } else if (robotTopicName(message.topic)) sample.robotId = m_identity.robotId;
     m_topics[message.topic] = sample;
-    if (sample.robotId && knownRobot(*sample.robotId)) {
+    if (sample.robotId) {
         if (message.topic == "Buff") {
-            if (buffMessage->has_buff_type() && buffMessage->buff_type() >= 1 && buffMessage->buff_type() <= 7)
-                m_robots[*sample.robotId]["Buff/" + QString::number(buffMessage->buff_type())] = sample;
-        } else m_robots[*sample.robotId][message.topic] = sample;
+            if (buffMessage->has_buff_type() && buffMessage->buff_type() >= 1 && buffMessage->buff_type() <= 7) {
+                const int id = *sample.robotId;
+                const QString key = "Buff/" + QString::number(buffMessage->buff_type());
+                if (knownRobot(id)) m_robots[id][key] = sample;
+                else if (id == 10 || id == 11 || id == 110 || id == 111) m_facilityBuffs[id][key] = sample;
+            }
+        } else if (knownRobot(*sample.robotId)) m_robots[*sample.robotId][message.topic] = sample;
     }
 
     if (const auto *radar = dynamic_cast<const wire::RadarInfoToClient *>(sample.message.get())) {
@@ -330,6 +335,8 @@ StateValue StateStore::robotHealth(int robotId) const
 
 StateValue StateStore::buff(int robotId, int type) const
 {
+    if (m_facilityBuffs.contains(robotId))
+        return view(m_facilityBuffs.value(robotId).value("Buff/" + QString::number(type)), m_clock());
     return robotTopic(robotId, "Buff/" + QString::number(type));
 }
 
@@ -349,11 +356,16 @@ QJsonObject StateStore::snapshot() const
 {
     Q_ASSERT(QThread::currentThread() == thread());
     const auto now = m_clock();
-    QJsonObject topics, robots, global, role;
+    QJsonObject topics, robots, global, role, facilityBuffs;
     for (auto it = m_topics.cbegin(); it != m_topics.cend(); ++it)
         topics.insert(it.key(), view(it.value(), now).toJson());
     for (auto it = m_robots.cbegin(); it != m_robots.cend(); ++it)
         robots.insert(QString::number(it.key()), robotSnapshot(it.key(), now));
+    for (auto entity = m_facilityBuffs.cbegin(); entity != m_facilityBuffs.cend(); ++entity) {
+        QJsonObject buffs;
+        for (auto it = entity->cbegin(); it != entity->cend(); ++it) buffs.insert(it.key(), view(it.value(), now).toJson());
+        facilityBuffs.insert(QString::number(entity.key()), buffs);
+    }
     const QMap<QString, QString> globals{{"game", "GameStatus"}, {"units", "GlobalUnitStatus"},
         {"logistics", "GlobalLogisticsStatus"}, {"mechanisms", "GlobalSpecialMechanism"},
         {"rune", "RuneStatusSync"}, {"sentry", "SentryStatusSync"}, {"dart", "DartSelectTargetStatusSync"}};
@@ -372,7 +384,7 @@ QJsonObject StateStore::snapshot() const
             {"round", m_round ? QJsonValue(static_cast<qint64>(*m_round)) : QJsonValue(QJsonValue::Null)},
             {"round_revision", QString::number(m_roundRevision)},
             {"self", m_identity.robotId ? QJsonValue(robotSnapshot(*m_identity.robotId, now)) : QJsonValue(QJsonValue::Null)},
-            {"robots", robots}, {"role", role}, {"topics", topics}, {"recent_notifications", history}};
+            {"robots", robots}, {"facility_buffs", facilityBuffs}, {"role", role}, {"topics", topics}, {"recent_notifications", history}};
 }
 
 QMap<QString, QString> StateStore::validities() const
@@ -388,6 +400,12 @@ QMap<QString, QString> StateStore::validities() const
         for (auto item = robot->cbegin(); item != robot->cend(); ++item) {
             const auto state = view(item.value(), now);
             result.insert(QString::number(robot.key()) + "/" + item.key(), state.validity + ":" + state.reason);
+        }
+    }
+    for (auto entity = m_facilityBuffs.cbegin(); entity != m_facilityBuffs.cend(); ++entity) {
+        for (auto item = entity->cbegin(); item != entity->cend(); ++item) {
+            const auto state = view(item.value(), now);
+            result.insert(QString::number(entity.key()) + "/" + item.key(), state.validity + ":" + state.reason);
         }
     }
     return result;

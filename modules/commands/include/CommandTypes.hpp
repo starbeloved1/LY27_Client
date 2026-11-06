@@ -49,12 +49,14 @@ struct DartRequest {
 struct SentryRequest { SentryAction action = SentryAction::Move; };
 struct MapPosition { float x = 0; float y = 0; };
 struct MapEnemy { int robotId = 0; };
+// 本地协同扩展：复用官方实体 ID，允许跟随己方车辆或标记建筑；不修改线格式。
+struct MapEntity { int id = 0; };
 struct MapRequest {
     MapSendRange range = MapSendRange::Specified;
     QList<int> receivers;
     MapMarker marker = MapMarker::Attack;
     std::optional<char> ascii;
-    std::optional<std::variant<MapPosition, MapEnemy>> target;
+    std::optional<std::variant<MapPosition, MapEnemy, MapEntity>> target;
 };
 
 using CommandRequest = std::variant<AssemblyRequest, PerformanceRequest, SentryModeRequest,CommonRequest, RuneRequest, DartRequest, SentryRequest, MapRequest>;

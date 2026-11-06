@@ -9,10 +9,10 @@ Item {
     readonly property string kind: phase.kind || "none"
     readonly property string token: phase.token || ""
     readonly property string art: phase.art || ""
-    property int frame: 0
+    property int frame: frameCount - 1
     readonly property int frameCount: 34
     visible: kind !== "none" && !(kind === "result" && dismissedToken === token)
-    onTokenChanged: frame = 0
+    onTokenChanged: frame = phase.animateVictory ? 0 : frameCount - 1
 
     Rectangle { anchors.fill: parent; color: root.kind === "result" ? "#c2080c10" : "#70000000" }
     MouseArea { anchors.fill: parent }
@@ -20,7 +20,8 @@ Item {
     Timer {
         interval: 40
         repeat: true
-        running: root.visible && root.kind === "result" && root.art !== "" && root.frame < root.frameCount - 1
+        running: root.visible && root.kind === "result" && root.phase.animateVictory
+            && root.art !== "" && root.frame < root.frameCount - 1
         onTriggered: ++root.frame
     }
     Image {

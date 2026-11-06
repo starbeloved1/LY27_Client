@@ -15,6 +15,8 @@ public:
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
+    // 侧栏和醒目播报共用 27 事件文案；无效参数不产生醒目提示。
+    static QVariantMap eventPresentation(int id, const QString &parameter, Team team);
 
 private:
     struct Row { QString time, text, color, parameter, timeSource; int id = 0; };
@@ -30,7 +32,7 @@ private:
     void appendRow(Row row, const StateSource &source, bool live);
     void observeEconomy();
     void clear();
-    Row describe(int id, const QString &parameter) const;
+    static Row describe(int id, const QString &parameter, Team team);
 };
 
 }

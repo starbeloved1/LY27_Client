@@ -94,7 +94,6 @@ Rectangle {
                 hp: blue ? (root.match.blueBaseHp ?? -1) : (root.match.redBaseHp ?? -1)
                 baseState: blue ? (root.match.blueBaseState ?? -1) : (root.match.redBaseState ?? -1)
                 statusText: blue ? (root.match.blueBaseStatusText ?? "状态未知") : (root.match.redBaseStatusText ?? "状态未知")
-                outpostHp: blue ? (root.match.bOutpostHp ?? -1) : (root.match.rOutpostHp ?? -1)
             }
         }
         Row {

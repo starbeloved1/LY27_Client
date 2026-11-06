@@ -47,6 +47,8 @@ public:
     StateValue robotTopic(int robotId, const QString &topic) const;
     StateValue robotHealth(int robotId) const;
     StateValue buff(int robotId, int type) const;
+    // 车辆与建筑共用带来源的 Buff 查询；建筑仅保存明确上报给其 ID 的消息。
+    QMap<BuffType, BuffState> buffs(int entityId) const;
     // 业务代码使用这些 C++ 结构；上面的 Topic/JSON 接口保留用于诊断。
     MatchState matchState() const;
     GlobalState globalState() const;
@@ -95,6 +97,7 @@ private:
     quint64 m_connection = 0;
     QMap<QString, Sample> m_topics;
     QMap<int, QMap<QString, Sample>> m_robots;
+    QMap<int, QMap<QString, Sample>> m_facilityBuffs;
     QList<Sample> m_history;
     QMap<QString, QString> m_validities;
 

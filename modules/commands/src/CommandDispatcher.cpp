@@ -270,8 +270,8 @@ CommandSubmission CommandDispatcher::map(const MapRequest &request)
     const auto marker = static_cast<quint32>(request.marker);
     if (range > 2 || marker < 1 || marker > 4 || !request.target)
         return reject("invalid_argument", "地图发送范围、标记或目标缺失/无效");
-    if ((range == 0 && request.receivers.isEmpty()) || (range != 0 && !request.receivers.isEmpty()) || request.receivers.size() > 7)
-        return reject("invalid_argument", "指定发送必须填写接收者，广播不能附带接收者");
+    if ((range == 0 && request.receivers.isEmpty()) || request.receivers.size() > 7)
+        return reject("invalid_argument", "指定发送必须填写接收者，接收者最多七个");
     QSet<int> receivers;
     QByteArray ids(7, '\0');
     for (int i = 0; i < request.receivers.size(); ++i) {
@@ -296,9 +296,18 @@ CommandSubmission CommandDispatcher::map(const MapRequest &request)
         if (!std::isfinite(position->x) || !std::isfinite(position->y) || position->x < 0 || position->y < 0)
             return reject("invalid_argument", "地图坐标必须为非负有限数");
         message.set_type(1); message.set_map_x(position->x); message.set_map_y(position->y);
-    } else {
-        const int id = std::get<MapEnemy>(*request.target).robotId;
+    } else if (const auto *enemy = std::get_if<MapEnemy>(&*request.target)) {
+        const int id = enemy->robotId;
         if (!groundRobot(id) || ally(id, m_identity.team)) return reject("invalid_argument", "地图敌方目标编号无效");
+        message.set_type(2); message.set_enemy_id(id); message.set_map_x(0); message.set_map_y(0);
+    } else {
+        const int id = std::get<MapEntity>(*request.target).id;
+        const bool building = id == 10 || id == 11 || id == 110 || id == 111;
+        if (m_identity.role != Role::Commander || (!groundRobot(id) && !building))
+            return reject("invalid_argument", "实体标记需要指挥手和有效的车辆或建筑 ID");
+        const bool own = (id >= 100) == (m_identity.team == Team::Blue);
+        if ((own && marker != 2) || (!own && marker != 1 && marker != 3))
+            return reject("invalid_argument", "己方实体只能防御，对方实体可攻击或警戒");
         message.set_type(2); message.set_enemy_id(id); message.set_map_x(0); message.set_map_y(0);
     }
     return submit("MapClickCmd", message, m_identity.role == Role::Commander ? 500000000 : 3000000000LL);

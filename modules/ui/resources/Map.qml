@@ -1,4 +1,5 @@
 import QtQuick
+import LY27.Ui 1.0
 
 Rectangle {
     id: root
@@ -7,6 +8,7 @@ Rectangle {
     color: "#11161b"
     property var viewModel: terminal
     readonly property bool blueView: viewModel ? viewModel.blueView : false
+    readonly property var tactics: viewModel ? viewModel.tactics : null
     readonly property real mapAspect: 1662 / 946
     MatchHeader {
         id: header
@@ -40,6 +42,22 @@ Rectangle {
             width: battlefield.paintedWidth
             height: battlefield.paintedHeight
             anchors.centerIn: parent
+            MouseArea {
+                objectName: "tacticalMapHitArea"
+                anchors.fill: parent
+                enabled: root.tactics ? root.tactics.commander : false
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: function(mouse) {
+                    if (mouse.button === Qt.RightButton) root.tactics.cancel()
+                    else root.tactics.clickMap(mouse.x / width, mouse.y / height)
+                }
+            }
+            TerritoryOverlayItem {
+                objectName: "territoryOverlay"
+                anchors.fill: parent
+                blueView: root.blueView
+                territories: root.viewModel ? root.viewModel.territories : ({})
+            }
             Repeater {
                 model: root.viewModel ? root.viewModel.robots : null
                 delegate: RobotMarker {
@@ -55,6 +73,7 @@ Rectangle {
                     required property string levelText
                     required property bool hpKnown
                     required property real hpRatio
+                    required property var activeBuffs
                     objectName: "mapRobot" + robotId
                     x: mapX * markerLayer.width
                     y: mapY * markerLayer.height
@@ -62,11 +81,16 @@ Rectangle {
                     opacity: positionFresh ? 1 : 0.38
                     blue: isBlue
                     self: isSelf
+                    selected: root.tactics ? root.tactics.selectedReceiver === robotId : false
+                    interactive: root.tactics ? root.tactics.commander && positionFresh : false
+                    onActivated: root.tactics.clickRobot(robotId)
+                    onCancelRequested: root.tactics.cancel()
                     number: robotNumber
                     angle: heading
                     rankText: levelText
                     healthKnown: hpKnown
                     ratio: hpRatio
+                    buffs: activeBuffs
                     mapWidth: markerLayer.width
                     mapHeight: markerLayer.height
                     Behavior on x { enabled: positionFresh && !root.flipping; NumberAnimation { duration: 85 } }
@@ -74,32 +98,113 @@ Rectangle {
                 }
             }
             Repeater {
-                // 对应底图 1662 × 946 中的设施中心；两端中部为基地，河道两侧的小圆塔为前哨站。
-                model: [
-                    {key: "RedBase", field: "redBaseHp", blue: false, px: 171, py: 461, radius: 62, maximum: 10000},
-                    {key: "BlueBase", field: "blueBaseHp", blue: true, px: 1514, py: 464, radius: 62, maximum: 10000},
-                    {key: "ROutpost", outpost: true, field: "rOutpostHp", blue: false, px: 667, py: 685, radius: 30, maximum: 1000},
-                    {key: "BOutpost", outpost: true, field: "bOutpostHp", blue: true, px: 1028, py: 237, radius: 30, maximum: 1000}
-                ]
+                model: root.tactics ? root.tactics.facilities : []
                 delegate: FacilityMapMarker {
                     required property var modelData
                     objectName: "map" + modelData.key
                     x: (root.blueView ? 1 - modelData.px / 1662 : modelData.px / 1662) * markerLayer.width
                     y: (root.blueView ? 1 - modelData.py / 946 : modelData.py / 946) * markerLayer.height
                     outpost: modelData.outpost ?? false
+                    interactive: root.tactics ? root.tactics.commander : false
+                    onActivated: root.tactics.clickFacility(modelData.id)
+                    onCancelRequested: root.tactics.cancel()
                     blue: modelData.blue
                     health: root.viewModel ? (root.viewModel.match[modelData.field] ?? -1) : -1
                     maximum: modelData.maximum
+                    buffs: root.viewModel ? (root.viewModel.facilityBuffs[String(modelData.id)] ?? []) : []
                     footprintRadius: modelData.radius / 946 * markerLayer.height
                     mapWidth: markerLayer.width
                     mapHeight: markerLayer.height
                 }
             }
+            Repeater {
+                // 接收席位固定，不随目标车的每次位置更新销毁、重建图标。
+                model: root.viewModel ? root.viewModel.robots : null
+                delegate: TacticalMarker {
+                    required property int robotId
+                    readonly property var mark: root.tactics ? (root.tactics.markerStates[String(robotId)] ?? ({})) : ({})
+                    property bool tracking: false
+                    objectName: "tacticalMarker" + robotId
+                    visible: mark.type !== undefined
+                    onVisibleChanged: {
+                        tracking = false
+                        Qt.callLater(function() { tracking = visible })
+                    }
+                    x: (mark.mapX ?? 0) * markerLayer.width
+                    y: (mark.mapY ?? 0) * markerLayer.height
+                    markerType: mark.type ?? 1
+                    receiver: root.tactics && root.tactics.commander ? String(robotId % 100) : ""
+                    lift: (mark.kind === "robot" ? 64 : mark.kind === "facility"
+                        ? Math.max(34, mark.radius / 946 * markerLayer.height) + 43 : 22) + (mark.buffRow ? 16 : 0)
+                    mapWidth: markerLayer.width
+                    mapHeight: markerLayer.height
+                    z: 5
+                    Behavior on x { enabled: tracking && !root.flipping; NumberAnimation { duration: 85 } }
+                    Behavior on y { enabled: tracking && !root.flipping; NumberAnimation { duration: 85 } }
+                }
+            }
+            MapMarkerMenu {
+                controller: root.tactics
+                x: Math.max(2, Math.min((target.mapX ?? 0) * markerLayer.width - width / 2, markerLayer.width - width - 2))
+                y: Math.max(2, Math.min((target.mapY ?? 0) * markerLayer.height - height - 12, markerLayer.height - height - 2))
+                z: 20
+            }
+        }
+        Rectangle {
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottomMargin: 6
+            width: Math.min(parent.width - 12, hint.implicitWidth + 24)
+            height: 26; radius: 3; z: 21
+            visible: root.tactics ? root.tactics.commander || root.tactics.feedback.length > 0 : false
+            color: "#e80a121a"
+            Text {
+                id: hint
+                anchors.fill: parent; anchors.margins: 4
+                text: root.tactics ? root.tactics.feedback || "指挥手：选择己方车 → 点击目标；右键 / Esc 取消" : ""
+                color: "#ffe08a"; font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
+            }
+        }
+        Rectangle {
+            id: selfBuffPanel
+            objectName: "selfBuffPanel"
+            readonly property bool compact: mapArea.height < 180
+            readonly property var buffs: root.viewModel ? root.viewModel.selfBuffs : []
+            visible: buffs.length > 0
+            x: compact ? parent.width - width - 8 : 8
+            y: compact ? 6 : parent.height - height - 8
+            width: compact ? selfBuffs.width + 12 : Math.max(134, selfBuffs.width + 20)
+            height: compact ? 24 : 48
+            color: "#ed0b1720"; border.color: "#72808a"; radius: 3; z: 20
+            Text {
+                x: 10; y: 5
+                visible: !selfBuffPanel.compact
+                text: "本机增益"; color: "#d6e5ef"; font.pixelSize: 11
+            }
+            BuffRow {
+                id: selfBuffs
+                objectName: "selfBuffRow"
+                x: selfBuffPanel.compact ? 6 : 10
+                y: selfBuffPanel.compact ? 5 : 25
+                buffs: parent.buffs
+                tooltipAbove: !selfBuffPanel.compact
+            }
+        }
+        MatchNotices {
+            id: matchNotices
+            anchors.top: parent.top
+            anchors.topMargin: parent.height < 180 ? (selfBuffPanel.visible && !matchNotices.timed.length ? 34 : 6) : 12
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(680, parent.width - 24)
+            controller: root.viewModel ? root.viewModel.notices : null
+            timedRightInset: selfBuffPanel.compact && selfBuffPanel.visible ? selfBuffPanel.width + 8 : 0
+            z: 12
         }
         MechanismNotices {
             id: mechanismNotices
             anchors.top: parent.top
-            anchors.topMargin: 12
+            anchors.topMargin: matchNotices.visible ? matchNotices.y + matchNotices.height + 8 : 12
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.min(1320, parent.width - 24)
             notices: root.viewModel ? root.viewModel.mechanisms : []
@@ -108,7 +213,8 @@ Rectangle {
         BattleAnnouncement {
             anchors.horizontalCenter: parent.horizontalCenter
             y: Math.max(4, Math.min(parent.height - height - 4,
-                mechanismNotices.height > 0 ? mechanismNotices.y + mechanismNotices.height + 8 : 24))
+                mechanismNotices.height > 0 ? mechanismNotices.y + mechanismNotices.height + 8
+                    : matchNotices.visible ? matchNotices.y + matchNotices.height + 8 : 24))
             width: Math.min(600, parent.width - 24)
             height: 50
             notice: root.viewModel ? root.viewModel.battleNotice : ({})
@@ -148,5 +254,13 @@ Rectangle {
         phase: root.viewModel ? root.viewModel.phase : ({})
         match: root.viewModel ? root.viewModel.match : ({})
         z: 100
+    }
+    DamagePanel {
+        anchors.left: parent.left
+        anchors.leftMargin: 12
+        anchors.verticalCenter: parent.verticalCenter
+        visible: desktopWindow.injuryPanelVisible
+        stats: root.viewModel ? root.viewModel.injury : ({})
+        z: 200
     }
 }

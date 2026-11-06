@@ -1,4 +1,12 @@
 add_library(ly27_ui STATIC
+    include/MatchNotices.hpp
+    src/MatchNotices.cpp
+    include/BuffPresentation.hpp
+    src/BuffPresentation.cpp
+    include/TacticalMapController.hpp
+    src/TacticalMapController.cpp
+    include/TerritoryOverlayItem.hpp
+    src/TerritoryOverlayItem.cpp
     include/BattleAnnouncementItem.hpp
     src/BattleAnnouncementItem.cpp
     include/MapWindow.hpp
@@ -20,15 +28,20 @@ file(GLOB_RECURSE ly27_phase_images CONFIGURE_DEPENDS
 file(GLOB ly27_battle_images CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/message/*.png"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/robots/*.png")
+file(GLOB ly27_buff_images CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buffs/*.png")
 qt_add_resources(ly27_ui ly27_ui_resources
     PREFIX "/ly27/ui"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources"
     FILES
         resources/BattleAnnouncement.qml
+        resources/BuffRow.qml
+        resources/MatchNotices.qml
+        ${ly27_buff_images}
         ${ly27_battle_images}
         resources/BaseHealthBar.qml
         resources/BaseHealthWing.qml
         resources/BattleAnalysisPanel.qml
+        resources/DamagePanel.qml
         resources/EventPanel.qml
         resources/FacilityMapMarker.qml
         resources/Map.qml
@@ -41,6 +54,12 @@ qt_add_resources(ly27_ui ly27_ui_resources
         ${ly27_phase_images}
         resources/OutpostStatusBadge.qml
         resources/RobotMarker.qml
+        resources/TacticalSymbol.qml
+        resources/TacticalMarker.qml
+        resources/MapMarkerMenu.qml
+        resources/images/injury/sundry_bullet.png
+        resources/images/injury/sundry_golf.png
+        resources/images/injury/sundry_icon.png
         resources/images/blue_base_blood/blue_base_blood_border.png
         resources/images/blue_base_blood/blue_base_blood_bottom.png
         resources/images/blue_base_blood/blue_base_blood_light.png

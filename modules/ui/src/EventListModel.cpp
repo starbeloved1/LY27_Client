@@ -97,7 +97,7 @@ void EventListModel::append(const EventNotice &event, bool live)
 {
     const auto &source = event.id.source;
     if (!event.id.value || !source.received || source.retained) return;
-    auto row = describe(*event.id.value, event.parameter.value.value_or(QString{}));
+    auto row = describe(*event.id.value, event.parameter.value.value_or(QString{}), m_team);
     appendRow(std::move(row), source, live);
 }
 void EventListModel::appendRow(Row row, const StateSource &source, bool live)
@@ -143,7 +143,13 @@ void EventListModel::observeEconomy()
     m_totalEconomy = total.value;
     m_economySource = s;
 }
-EventListModel::Row EventListModel::describe(int id, const QString &parameter) const
+QVariantMap EventListModel::eventPresentation(int id, const QString &parameter, Team team)
+{
+    const auto row = describe(id, parameter, team);
+    if (id < 3 || id > 16 || row.text.startsWith(QStringLiteral("事件 #"))) return {};
+    return {{"id", id}, {"text", row.text}, {"accent", row.color}};
+}
+EventListModel::Row EventListModel::describe(int id, const QString &parameter, Team team)
 {
     Row row;
     row.id = id;
@@ -154,7 +160,7 @@ EventListModel::Row EventListModel::describe(int id, const QString &parameter) c
     const auto parts = p.split(',');
     bool ok = false;
     const int value = p.toInt(&ok);
-    const bool redAlly = m_team == Team::Red;
+    const bool redAlly = team == Team::Red;
     auto favorable = [&](bool red) { return red == redAlly ? success : danger; };
     row.color = normal;
     row.text = QStringLiteral("事件 #%1").arg(id);

@@ -1,4 +1,5 @@
 #include "TerminalViewModel.hpp"
+#include "BuffPresentation.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -56,7 +57,8 @@ TerminalViewModel::TerminalViewModel(const StateStore &store, TerminalIdentity i
     : QObject(parent), m_store(store), m_identity(std::move(identity)),
       m_redTeam(std::move(redTeam)), m_blueTeam(std::move(blueTeam)),
       m_blueView(m_identity.team == Team::Blue), m_robots(store, m_identity, this),
-      m_events(store, m_identity.team, this)
+      m_events(store, m_identity.team, this), m_tactics(store, m_identity, this),
+      m_notices(store, m_identity.team, this)
 {
     connect(&store, &StateStore::changed, this, [this](const QString &topic) {
         refresh(); observeBattleEvent(topic);
@@ -75,6 +77,7 @@ void TerminalViewModel::setBlueView(bool value)
     m_blueView = value;
     emit blueViewChanged();
     m_robots.refresh(value);
+    m_tactics.setBlueView(value);
 }
 
 void TerminalViewModel::clearBattleNotice()
@@ -157,6 +160,14 @@ void TerminalViewModel::observeBattleEvent(const QString &topic)
 
 void TerminalViewModel::refresh()
 {
+    updateInjury();
+    m_notices.refresh();
+    const auto selfBuffs = m_identity.role != Role::Commander && m_identity.robotId
+        ? mapBuffs(m_store.buffs(*m_identity.robotId)) : QVariantList{};
+    if (selfBuffs != m_selfBuffs) { m_selfBuffs = selfBuffs; emit selfBuffsChanged(); }
+    QVariantMap facilityBuffs;
+    for (int id : {10, 11, 110, 111}) facilityBuffs.insert(QString::number(id), mapBuffs(m_store.buffs(id)));
+    if (m_facilityBuffs != facilityBuffs) { m_facilityBuffs = facilityBuffs; emit facilityBuffsChanged(); }
     const auto game = m_store.matchState();
     const auto global = m_store.globalState();
     const bool redAlly = m_identity.team == Team::Red;
@@ -211,10 +222,97 @@ void TerminalViewModel::refresh()
     const auto previousPhase = m_phase;
     const auto previousMechanisms = m_mechanisms;
     updatePresentation(game, global, paused);
-    const bool different = m_match != values || previousPhase != m_phase || previousMechanisms != m_mechanisms;
+    updateTerritories(global);
+    const bool different = m_match != values || previousPhase != m_phase;
     m_match = values;
+    if (previousMechanisms != m_mechanisms) emit mechanismsChanged();
     if (different) emit changed();
     m_robots.refresh(m_blueView);
+}
+
+void TerminalViewModel::updateTerritories(const GlobalState &global)
+{
+    const bool redAlly = m_identity.team == Team::Red;
+    const auto state = [](bool known, bool red, bool temporary) {
+        return QVariantMap{{"known", known}, {"controller", known ? (red ? "red" : "blue") : "unknown"},
+            {"temporary", known && temporary}, {"color", known ? (red ? "#FF737A" : "#62C9FF") : "#9AA8B4"},
+            {"advancing", ""}, {"seconds", -1}};
+    };
+    const auto outpost = [&](const StateField<quint32> &field) {
+        if (!field.isFresh() || *field.value < 1 || *field.value > 4) return state(false, false, false);
+        const auto value = *field.value;
+        return state(true, value <= 2 ? redAlly : !redAlly, value == 2 || value == 3);
+    };
+    const auto base = [&](const StateField<quint32> &field, bool originalRed) {
+        if (!field.isFresh() || *field.value < 1 || *field.value > 2) return state(false, false, false);
+        // 基地枚举以该基地原始拥有方为准：1 原方完全控制，2 对方临时控制。
+        return state(true, *field.value == 1 ? originalRed : !originalRed, *field.value == 2);
+    };
+    const auto &redBase = redAlly ? global.allyBase : global.enemyBase;
+    const auto &blueBase = redAlly ? global.enemyBase : global.allyBase;
+    const QStringList keys{"rOutpost", "bOutpost", "redBase", "blueBase"};
+    QVariantMap values{{keys[0], outpost(global.rOutpost.controlState)}, {keys[1], outpost(global.bOutpost.controlState)},
+        {keys[2], base(redBase.controlState, true)}, {keys[3], base(blueBase.controlState, false)}};
+    for (const auto &notice : m_mechanisms) {
+        const auto mechanism = notice.toMap();
+        const int id = mechanism.value("id").toInt();
+        if (id < 3 || id > 6) continue;
+        auto region = values.value(keys[id - 3]).toMap();
+        const bool red = mechanism.value("enemy").toBool() ? !redAlly : redAlly;
+        region.insert("advancing", red ? "red" : "blue");
+        region.insert("seconds", mechanism.value("seconds"));
+        values.insert(keys[id - 3], region);
+    }
+    if (values != m_territories) { m_territories = values; emit territoriesChanged(); }
+}
+
+void TerminalViewModel::updateInjury()
+{
+    const auto robot = m_store.self();
+    const InjuryState injury = robot ? robot->injury : InjuryState{};
+    const auto valueText = [](const StateField<quint32> &field) {
+        return field.isFresh() ? QString::number(*field.value) : QStringLiteral("—");
+    };
+    struct Row {
+        const char *key;
+        const char *label;
+        const StateField<quint32> *field;
+        const char *icon;
+    };
+    const Row definitions[] = {
+        {"smallProjectile", "17mm 弹丸", &injury.smallProjectileDamage, "sundry_bullet.png"},
+        {"largeProjectile", "42mm 弹丸", &injury.largeProjectileDamage, "sundry_golf.png"},
+        {"collision", "撞击", &injury.collisionDamage, "sundry_icon.png"},
+        {"dartSplash", "飞镖溅射", &injury.dartSplashDamage, "sundry_icon.png"},
+        {"moduleOffline", "模块离线", &injury.moduleOfflineDamage, "sundry_icon.png"},
+        {"offline", "异常离线", &injury.offlineDamage, "sundry_icon.png"},
+        {"penalty", "判罚", &injury.penaltyDamage, "sundry_icon.png"},
+        {"serverKill", "服务器强制战亡", &injury.serverKillDamage, "sundry_icon.png"}
+    };
+    QVariantList rows;
+    for (const auto &row : definitions) {
+        QString percent = QStringLiteral("—");
+        // 缺字段不补零；仅总量和分项同时有效时计算占比，不合并不同伤害来源。
+        if (row.field->isFresh() && injury.totalDamage.isFresh()) {
+            if (*injury.totalDamage.value > 0)
+                percent = QString::number(100.0 * *row.field->value / *injury.totalDamage.value, 'f', 1) + "%";
+            else if (*row.field->value == 0) percent = QStringLiteral("0.0%");
+        }
+        rows.append(QVariantMap{{"key", row.key}, {"label", QString::fromUtf8(row.label)},
+            {"valueText", valueText(*row.field)}, {"percentText", percent}, {"icon", row.icon}});
+    }
+    QString killer = QStringLiteral("未知");
+    if (injury.killerId.isFresh()) {
+        const auto id = *injury.killerId.value;
+        if (id == 0) killer = QStringLiteral("未知／环境伤害");
+        else if (id == 1 || id == 3 || id == 4 || id == 7 || id == 101 || id == 103 || id == 104 || id == 107)
+            killer = QStringLiteral("%1 %2 号").arg(id >= 100 ? QStringLiteral("蓝方") : QStringLiteral("红方")).arg(id % 100);
+        else killer = QStringLiteral("编号 %1").arg(id);
+    }
+    const QVariantMap values{{"rows", rows}, {"totalText", valueText(injury.totalDamage)}, {"killerText", killer},
+        {"robotText", robot ? QStringLiteral("%1 %2 号").arg(robot->team == Team::Blue ? QStringLiteral("蓝方") : QStringLiteral("红方")).arg(robot->robotId % 100)
+                            : QStringLiteral("当前身份未绑定机器人")}};
+    if (m_injury != values) { m_injury = values; emit injuryChanged(); }
 }
 
 void TerminalViewModel::updatePresentation(const MatchState &game, const GlobalState &global, bool paused)
@@ -223,15 +321,20 @@ void TerminalViewModel::updatePresentation(const MatchState &game, const GlobalS
     const QString epoch = s.received ? QStringLiteral("%1/%2/%3").arg(s.sessionId).arg(s.connection).arg(s.roundRevision) : QString{};
     if (epoch != m_phaseEpoch) {
         m_phaseEpoch = epoch; m_lastStage = -1; m_startUntilNs = 0;
+        m_animateVictory = false;
     }
     m_phase = {{"kind", "none"}, {"token", epoch}};
     m_mechanisms.clear();
     if (!game.stage.isFresh() || static_cast<quint32>(*game.stage.value) > 5) {
+        m_animateVictory = false;
         m_lastStage = -1; m_startUntilNs = 0; return;
     }
     const int stage = static_cast<int>(*game.stage.value);
     const qint64 nowNs = s.receivedMonotonicNs + s.ageMs.value_or(0) * 1000000;
     if (stage == 4 && m_lastStage == 3) m_startUntilNs = nowNs + 1200000000LL;
+    // 启动或重连后的结算快照不重播；胜者延迟上报时保留本次真实阶段切换的播放资格。
+    if (stage != 5) m_animateVictory = false;
+    else if (m_lastStage != 5) m_animateVictory = m_lastStage == 4;
     m_lastStage = stage;
     const int remaining = game.remainingSeconds.isFresh() && *game.remainingSeconds.value >= 0 ? *game.remainingSeconds.value : -1;
     m_phase.insert("token", epoch + "/" + QString::number(stage));
@@ -246,6 +349,7 @@ void TerminalViewModel::updatePresentation(const MatchState &game, const GlobalS
         m_phase.insert("title", winner == 1 ? QStringLiteral("红方胜利") : winner == 2 ? QStringLiteral("蓝方胜利")
             : winner == 0 ? QStringLiteral("平局") : terminated ? QStringLiteral("比赛异常终止") : QStringLiteral("等待裁判结算"));
         m_phase.insert("art", winner == 1 ? "red" : winner == 2 ? "blue" : "");
+        m_phase.insert("animateVictory", m_animateVictory && (winner == 1 || winner == 2));
         m_phase.insert("description", endReasonText(game.endReason));
         m_phase.insert("token", epoch + "/result/" + QString::number(winner) + (terminated ? "/terminated" : ""));
     } else if (paused) {

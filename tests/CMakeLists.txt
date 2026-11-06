@@ -53,6 +53,32 @@ add_test(NAME reconfiguration COMMAND test_reconfiguration)
 set_tests_properties(reconfiguration PROPERTIES TIMEOUT 40)
 
 if(LY27_BUILD_DESKTOP)
+    add_executable(test_match_notices test_match_notices.cpp)
+    target_link_libraries(test_match_notices PRIVATE ly27_ui Qt6::Test)
+    add_test(NAME match_notices COMMAND test_match_notices)
+    set_tests_properties(match_notices PROPERTIES TIMEOUT 20
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_executable(test_buffs test_buffs.cpp)
+    target_link_libraries(test_buffs PRIVATE ly27_ui Qt6::Test)
+    add_test(NAME buffs COMMAND test_buffs)
+    set_tests_properties(buffs PROPERTIES TIMEOUT 20
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_executable(test_tactical_map test_tactical_map.cpp)
+    target_link_libraries(test_tactical_map PRIVATE ly27_ui Qt6::Test Qt6::Network)
+    target_compile_definitions(test_tactical_map PRIVATE LY27_BROKER_PATH="${MOSQUITTO_EXECUTABLE}")
+    add_test(NAME tactical_map COMMAND test_tactical_map)
+    set_tests_properties(tactical_map PROPERTIES TIMEOUT 45
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_executable(test_territories test_territories.cpp)
+    target_link_libraries(test_territories PRIVATE ly27_ui Qt6::Test)
+    add_test(NAME territories COMMAND test_territories)
+    set_tests_properties(territories PROPERTIES TIMEOUT 20
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_executable(test_injury test_injury.cpp)
+    target_link_libraries(test_injury PRIVATE ly27_ui Qt6::Test)
+    add_test(NAME injury COMMAND test_injury)
+    set_tests_properties(injury PROPERTIES TIMEOUT 20
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_executable(test_events test_events.cpp)
     target_link_libraries(test_events PRIVATE ly27_ui Qt6::Test)
     add_test(NAME events COMMAND test_events)

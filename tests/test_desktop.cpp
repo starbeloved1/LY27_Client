@@ -37,6 +37,48 @@ QQuickItem *item(QQuickItem *root, const QString &name)
 class DesktopTest : public QObject {
     Q_OBJECT
 private slots:
+    void baseHealthLengthMatchesNumericValue()
+    {
+        qint64 now = 1000000000;
+        ly27::StateStore store(identity(), nullptr, [&now] { return now; });
+        store.reset("base-health-ratio"); store.setConnected(true);
+        ly27::TerminalViewModel model(store, identity(), "红方", "蓝方");
+        ly27::MapWindow window(&model); window.show();
+        auto *root = window.rootObject();
+        ly27::wire::GlobalUnitStatus units;
+        for (int hp : {10000, 7800, 6000, 5000, 4000, 1000, 0, 5000, 10000}) {
+            units.set_base_health(hp); units.set_enemy_base_health(hp);
+            QVERIFY(send(store, units, now));
+            for (const auto &prefix : {QString("red"), QString("blue")}) {
+                auto *bar = item(root, prefix + "BaseHealth"); QVERIFY(bar);
+                auto *fill = item(bar, "baseHealthFill"); QVERIFY(fill);
+                auto *frame = item(bar, "baseHealthFrame"); QVERIFY(frame);
+                QCOMPARE(frame->width(), bar->width());
+                auto *value = item(bar, "baseHealthValue"); QVERIFY(value);
+                QCOMPARE(value->property("text").toString(), QString::number(hp));
+                QVERIFY(qAbs(fill->width() / bar->width() - hp / 10000.0) < 0.0001);
+                QCOMPARE(fill->x(), prefix == "blue" ? 0.0 : bar->width() - fill->width());
+                auto *map = item(root, prefix == "blue" ? "mapBlueBase" : "mapRedBase");
+                QCOMPARE(map->property("ratio").toDouble(), hp / 10000.0);
+            }
+            if (hp == 5000) {
+                QTest::qWait(300);
+                auto *bar = item(root, "redBaseHealth");
+                QTRY_COMPARE(bar->property("trailHealth").toInt(), hp);
+                QVERIFY(QDir().mkpath("test-artifacts"));
+                QVERIFY(window.grabWindow().save("test-artifacts/base-half-health.png"));
+            }
+        }
+        units.clear_base_health(); units.clear_enemy_base_health();
+        QVERIFY(send(store, units, now));
+        for (const auto &prefix : {QString("red"), QString("blue")}) {
+            auto *bar = item(root, prefix + "BaseHealth");
+            QCOMPARE(item(bar, "baseHealthValue")->property("text").toString(), QString("—"));
+            QCOMPARE(item(bar, "baseHealthFill")->width(), 0.0);
+            QCOMPARE(bar->property("trailHealth").toInt(), 0);
+        }
+        window.setSource(QUrl());
+    }
     void mapFacilityHealthAndPerspective()
     {
         qint64 now = 1000000000;
@@ -76,6 +118,8 @@ private slots:
                         auto *icon = item(facility, "facilityMapIcon");
                         QVERIFY(icon);
                         QVERIFY(icon->isVisible());
+                        QCOMPARE(icon->width(), facility->property("tiny").toBool()
+                            ? qMin(30.0, layer->height() * .18) : 56.0);
                         QTRY_COMPARE(icon->property("status").toInt(), 1);
                         QCOMPARE(icon->property("source").toUrl().fileName(),
                                  i == 2 ? QString("red_map_outpost.png") : QString("blue_map_outpost.png"));
@@ -220,7 +264,9 @@ private slots:
                 const double expected = metric == "ControlPoints" ? 1250.0 / 980 : 12345678.0 / 98765432;
                 QVERIFY(qAbs(redBar->width() / blueBar->width() - expected) < 0.001);
             }
-            for (const auto &name : {"redBaseHealth", "blueBaseHealth", "redOutpostHealth", "blueOutpostHealth"}) {
+            QVERIFY(!item(root, "redOutpostHealth"));
+            QVERIFY(!item(root, "blueOutpostHealth"));
+            for (const auto &name : {"redBaseHealth", "blueBaseHealth"}) {
                 auto *facility = item(root, name);
                 QVERIFY(facility);
                 QVERIFY(header.contains(rect(facility)));
@@ -263,15 +309,15 @@ private slots:
         QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
                          viewButton->mapToScene(QPointF(viewButton->width() / 2, viewButton->height() / 2)).toPoint());
         QTRY_COMPARE(model.blueView(), !previousView);
-        // 核对四位前哨血量、满血、摧毁与缺失值，不让数字被组件裁切。
+        // 顶部只保留基地数字；前哨血量继续由地图显示。
         units.set_base_health(10000); units.set_enemy_base_health(0);
         units.set_outpost_r_health(1000); units.clear_outpost_b_health();
         QVERIFY(send(store, units, now));
-        const QStringList facilities{"redBaseHealth", "blueBaseHealth", "redOutpostHealth", "blueOutpostHealth"};
-        const QStringList expected{"10000", "0", "1000", "—"};
+        const QStringList facilities{"redBaseHealth", "blueBaseHealth"};
+        const QStringList expected{"10000", "0"};
         for (int i = 0; i < facilities.size(); ++i) {
             auto *facility = item(root, facilities[i]);
-            auto *value = item(facility, i < 2 ? "baseHealthValue" : "outpostHealthValue");
+            auto *value = item(facility, "baseHealthValue");
             QVERIFY(value);
             QTRY_COMPARE(value->property("text").toString(), expected[i]);
             QVERIFY(value->property("contentWidth").toReal() <= value->width() + 1);
