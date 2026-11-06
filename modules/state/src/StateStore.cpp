@@ -132,6 +132,8 @@ bool StateStore::apply(const DecodedMessage &message, qint64 utcMs, qint64 monot
     const auto previous = m_topics.constFind(message.topic);
     if (previous != m_topics.cend() && previous->received && monotonicNs < previous->monotonicNs)
         return false;
+    const auto *radarInput = dynamic_cast<const wire::RadarInfoToClient *>(message.message.get());
+    if (radarInput && radarInput->robot_info_size() != 8) return false;
 
     bool roundChanged = false;
     const auto *game = dynamic_cast<const wire::GameStatus *>(message.message.get());
@@ -168,6 +170,8 @@ bool StateStore::apply(const DecodedMessage &message, qint64 utcMs, qint64 monot
     const double hz = info.value("frequency_hz").toDouble();
     // 工程缺省策略：允许三个周期，最低 500 ms；不是官方超时保证。
     if (hz > 0) sample.ttlMs = std::max<qint64>(500, static_cast<qint64>(std::ceil(3000 / hz)));
+    // 触发式雷达的本地显示超时独立配置，不把测试频率当作官方发送周期。
+    if (info.contains("state_ttl_ms")) sample.ttlMs = info.value("state_ttl_ms").toInt();
     const auto *buffMessage = dynamic_cast<const wire::Buff *>(sample.message.get());
     if (buffMessage && buffMessage->has_buff_left_time())
         sample.ttlMs = static_cast<qint64>(buffMessage->buff_left_time()) * 1000;
@@ -187,6 +191,23 @@ bool StateStore::apply(const DecodedMessage &message, qint64 utcMs, qint64 monot
         } else m_robots[*sample.robotId][message.topic] = sample;
     }
 
+    if (const auto *radar = dynamic_cast<const wire::RadarInfoToClient *>(sample.message.get())) {
+        const int ally = m_identity.team == Team::Red ? 0 : 100;
+        const int enemy = ally == 0 ? 100 : 0;
+        const int ids[] = {enemy + 1, enemy + 3, enemy + 4, enemy + 7,
+                           ally + 1, ally + 3, ally + 4, ally + 7};
+        // 外层原始报文保存在 m_topics；每车保留类型化单体与同一份接收来源。
+        for (int i = 0; i < radar->robot_info_size(); ++i) {
+            auto projected = sample;
+            projected.robotId = ids[i];
+            const auto &entry = radar->robot_info(i);
+            projected.message = std::make_shared<wire::RadarSingleRobotInfo>(entry);
+            projected.fields = {{"target_pos_x", static_cast<qint64>(entry.target_pos_x())},
+                                {"target_pos_y", static_cast<qint64>(entry.target_pos_y())}};
+            if (entry.has_is_high_light()) projected.fields.insert("is_high_light", static_cast<int>(entry.is_high_light()));
+            m_robots[ids[i]][message.topic] = projected;
+        }
+    }
     if (message.topic == "GlobalUnitStatus") {
         // 官方顺序为己方 1/3/4/7，再对方 1/3/4/7，不能当作绝对红蓝顺序。
         for (auto &robot : m_robots) robot.remove("GlobalHealth");

@@ -23,8 +23,12 @@ private:
     QList<Row> m_rows;
     QString m_session;
     quint64 m_roundRevision = 0;
+    std::optional<quint64> m_totalEconomy;
+    StateSource m_economySource;
     void observe(const QString &topic);
     void append(const EventNotice &event, bool live);
+    void appendRow(Row row, const StateSource &source, bool live);
+    void observeEconomy();
     void clear();
     Row describe(int id, const QString &parameter) const;
 };

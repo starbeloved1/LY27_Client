@@ -1,9 +1,11 @@
 #include "MapWindow.hpp"
 #include "TerminalViewModel.hpp"
+#include "BattleAnnouncementItem.hpp"
 
 #include <QResource>
 #include <QUrl>
 #include <QQmlContext>
+#include <qqml.h>
 
 static void initializeUiResources()
 {
@@ -17,6 +19,8 @@ MapWindow::MapWindow(TerminalViewModel *model, QWindow *parent)
     : QQuickView(parent)
 {
     initializeUiResources();
+    static const int announcementType = qmlRegisterType<BattleAnnouncementItem>("LY27.Ui", 1, 0, "BattleAnnouncementItem");
+    Q_UNUSED(announcementType);
     setTitle(QStringLiteral("LY27 Client"));
     setResizeMode(QQuickView::SizeRootObjectToView);
     setMinimumSize(QSize(640, 480));

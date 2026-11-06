@@ -2,66 +2,68 @@ import QtQuick
 
 Item {
     id: root
-    property string label: ""
     property int health: -1
     property int maximum: 10000
     property bool blue: false
+    property bool outpost: false
     property real footprintRadius: 0
     property real mapWidth: 0
     property real mapHeight: 0
-    readonly property bool compact: mapWidth < 700 || mapHeight < 350
-    readonly property real ratio: health < 0 ? 0 : Math.max(0, Math.min(1, health / maximum))
-    readonly property color accent: blue ? "#3caff4" : "#ee6468"
+    readonly property bool tiny: mapHeight < 180
+    readonly property bool healthKnown: health >= 0 && maximum > 0
+    readonly property real ratio: healthKnown ? Math.max(0, Math.min(1, health / maximum)) : 0
+    readonly property color accent: blue ? "#319de8" : "#e95255"
     width: 1; height: 1
     z: 2
+    Image {
+        id: icon
+        objectName: "facilityMapIcon"
+        visible: root.outpost
+        source: root.outpost ? "images/minimap/" + (root.blue ? "blue" : "red") + "_map_outpost.png" : ""
+        width: root.tiny ? Math.min(28, root.mapHeight * 0.18) : 44
+        height: width * 72 / 60
+        x: -width / 2; y: -height / 2
+        fillMode: Image.PreserveAspectFit
+        smooth: true; mipmap: true
+        opacity: root.health === 0 ? 0.5 : 1
+    }
     Item {
         id: caption
         objectName: "facilityMapCaption"
-        width: root.compact ? 92 : 112
-        height: root.compact ? 32 : 41
-        // 锚点是图片中设施中心，显示块放在设施轮廓上方并留出间距。
+        width: 60; height: 14
+        // 血条放在设施轮廓和图标上方；临近图片边缘时整体向内收。
         x: Math.max(2 - root.x, Math.min(-width / 2, root.mapWidth - root.x - width - 2))
-        y: Math.max(2 - root.y, -root.footprintRadius - height - (root.compact ? 3 : 6))
-        Rectangle {
-            anchors.fill: parent
-            color: "#ed101a23"
-            border.color: root.health < 0 ? "#728694" : root.accent
-            radius: 2
-        }
-        Text {
-            width: parent.width
-            height: root.compact ? 14 : 18
-            text: root.label
-            color: root.health < 0 ? "#a2b4c1" : root.accent
-            font.pixelSize: root.compact ? 10 : 11
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
+        y: Math.max(2 - root.y,
+            -Math.max(root.footprintRadius, root.outpost ? icon.height / 2 : 0) - height - 5)
         Rectangle {
             id: track
             objectName: "facilityMapHealthTrack"
-            x: 3; y: root.compact ? 14 : 18
-            width: parent.width - 6; height: parent.height - y - 3
-            color: "#19222a"
+            anchors.fill: parent
+            radius: 3
+            color: "#f0131d26"
             Rectangle {
                 objectName: "facilityMapHealthFill"
-                height: parent.height
-                width: parent.width * root.ratio
+                x: 1; y: 1
+                height: parent.height - 2
+                width: (parent.width - 2) * root.ratio
+                radius: 2
                 color: root.accent
-                opacity: 0.85
                 Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
             }
-            Text {
-                objectName: "facilityMapHealthValue"
+            Rectangle {
                 anchors.fill: parent
-                text: root.health >= 0 ? root.health.toString() : "—"
-                color: "#ffffff"
-                font.pixelSize: root.compact ? 12 : 14
-                font.bold: true
+                radius: parent.radius
+                color: "transparent"
+                border.color: root.healthKnown ? "#efd17c" : "#8192a0"
+            }
+            Text {
+                objectName: "facilityMapHealthUnknown"
+                visible: !root.healthKnown
+                anchors.fill: parent
+                text: "?"
+                color: "#ffffff"; font.pixelSize: 10
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
-                style: Text.Outline; styleColor: "#17212b"
             }
         }
     }

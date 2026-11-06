@@ -159,7 +159,7 @@ private slots:
         runtime.stop();
     }
 
-    void runtimeRecordsParsedMalformedAndOpaquePayloads()
+    void runtimeRecordsParsedRadarAndMalformedPayloads()
     {
         ly27::TerminalConfig config;
         config.identity.stationId = "integration";
@@ -174,20 +174,22 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(runtime.snapshot()["modules"].toObject()["mqtt"] == "ready" && ready(publisher), 5000);
         QVERIFY(publisher.publish("GameStatus", QByteArray::fromHex("280430ac02")));
         QVERIFY(publisher.publish("GameStatus", QByteArray::fromHex("80")));
-        const auto radarBytes = QByteArray::fromHex("0a03080102");
+        const auto radarBytes = QByteArray::fromHex("0a06080710091800").repeated(8);
         QVERIFY(publisher.publish("RadarInfoToClient", radarBytes));
         QTRY_COMPARE_WITH_TIMEOUT(observed.count(), 3, 3000);
         const auto status = runtime.snapshot()["protocol"].toObject();
-        QCOMPARE(status["parsed"].toInt(), 1);
+        QCOMPARE(status["parsed"].toInt(), 2);
         QCOMPARE(status["rejected"].toInt(), 1);
-        QCOMPARE(status["unresolved"].toInt(), 1);
+        QCOMPARE(status["unresolved"].toInt(), 0);
         QVERIFY(runtime.stateStore().topic("GameStatus").isFresh());
         QCOMPARE(runtime.stateStore().topic("GameStatus").fields["stage_countdown_sec"].toInt(), 300);
         const auto match = runtime.stateStore().matchState();
         QCOMPARE(*match.stage.value, ly27::GameStage::Battle);
         QCOMPARE(*match.remainingSeconds.value, 300);
         QVERIFY(match.stage.isFresh());
-        QCOMPARE(runtime.stateStore().topic("RadarInfoToClient").validity, QString("unknown"));
+        QVERIFY(runtime.stateStore().topic("RadarInfoToClient").isFresh());
+        QVERIFY(runtime.stateStore().robot(103)->position.x.isFresh());
+        QVERIFY(qAbs(*runtime.stateStore().robot(103)->position.x.value - 0.07f) < 0.0001f);
         runtime.stop();
         QCOMPARE(runtime.stateStore().topic("GameStatus").validity, QString("disconnected"));
         QCOMPARE(runtime.stateStore().matchState().stage.source.validity, ly27::StateValidity::Disconnected);
@@ -196,7 +198,7 @@ private slots:
         const auto lines = journal.readAll().trimmed().split('\n');
         QCOMPARE(lines.size(), 3);
         const auto last = QJsonDocument::fromJson(lines.last()).object();
-        QCOMPARE(last["status"].toString(), QString("unresolved_schema"));
+        QCOMPARE(last["status"].toString(), QString("parsed"));
         QCOMPARE(QByteArray::fromBase64(last["payload_base64"].toString().toLatin1()), radarBytes);
         QCOMPARE(last["session_id"].toString(), runtime.snapshot()["session_id"].toString());
         const auto oldSession = runtime.snapshot()["session_id"].toString();

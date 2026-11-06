@@ -7,6 +7,7 @@ Rectangle {
     color: "#11161b"
     property var viewModel: terminal
     readonly property bool blueView: viewModel ? viewModel.blueView : false
+    readonly property real mapAspect: 1662 / 946
     MatchHeader {
         id: header
         anchors.left: parent.left
@@ -18,7 +19,7 @@ Rectangle {
         id: mapArea
         objectName: "mapArea"
         anchors.top: header.bottom
-        anchors.bottom: footer.top
+        anchors.bottom: analysis.top
         anchors.left: events.right
         anchors.right: parent.right
         clip: true
@@ -51,7 +52,6 @@ Rectangle {
                     required property real heading
                     required property bool positionKnown
                     required property bool positionFresh
-                    required property string hpText
                     required property string levelText
                     required property bool hpKnown
                     required property real hpRatio
@@ -64,7 +64,6 @@ Rectangle {
                     self: isSelf
                     number: robotNumber
                     angle: heading
-                    healthText: hpText
                     rankText: levelText
                     healthKnown: hpKnown
                     ratio: hpRatio
@@ -77,17 +76,17 @@ Rectangle {
             Repeater {
                 // 对应底图 1662 × 946 中的设施中心；两端中部为基地，河道两侧的小圆塔为前哨站。
                 model: [
-                    {key: "RedBase", label: "红方基地", field: "redBaseHp", blue: false, px: 171, py: 461, radius: 62, maximum: 10000},
-                    {key: "BlueBase", label: "蓝方基地", field: "blueBaseHp", blue: true, px: 1514, py: 464, radius: 62, maximum: 10000},
-                    {key: "ROutpost", label: "R 前哨站", field: "rOutpostHp", blue: false, px: 667, py: 685, radius: 30, maximum: 1000},
-                    {key: "BOutpost", label: "B 前哨站", field: "bOutpostHp", blue: true, px: 1028, py: 237, radius: 30, maximum: 1000}
+                    {key: "RedBase", field: "redBaseHp", blue: false, px: 171, py: 461, radius: 62, maximum: 10000},
+                    {key: "BlueBase", field: "blueBaseHp", blue: true, px: 1514, py: 464, radius: 62, maximum: 10000},
+                    {key: "ROutpost", outpost: true, field: "rOutpostHp", blue: false, px: 667, py: 685, radius: 30, maximum: 1000},
+                    {key: "BOutpost", outpost: true, field: "bOutpostHp", blue: true, px: 1028, py: 237, radius: 30, maximum: 1000}
                 ]
                 delegate: FacilityMapMarker {
                     required property var modelData
                     objectName: "map" + modelData.key
                     x: (root.blueView ? 1 - modelData.px / 1662 : modelData.px / 1662) * markerLayer.width
                     y: (root.blueView ? 1 - modelData.py / 946 : modelData.py / 946) * markerLayer.height
-                    label: modelData.label
+                    outpost: modelData.outpost ?? false
                     blue: modelData.blue
                     health: root.viewModel ? (root.viewModel.match[modelData.field] ?? -1) : -1
                     maximum: modelData.maximum
@@ -97,13 +96,31 @@ Rectangle {
                 }
             }
         }
+        MechanismNotices {
+            id: mechanismNotices
+            anchors.top: parent.top
+            anchors.topMargin: 12
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(1320, parent.width - 24)
+            notices: root.viewModel ? root.viewModel.mechanisms : []
+            z: 10
+        }
+        BattleAnnouncement {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: Math.max(4, Math.min(parent.height - height - 4,
+                mechanismNotices.height > 0 ? mechanismNotices.y + mechanismNotices.height + 8 : 24))
+            width: Math.min(600, parent.width - 24)
+            height: 50
+            notice: root.viewModel ? root.viewModel.battleNotice : ({})
+            z: 11
+        }
     }
     EventPanel {
         id: events
         anchors.top: header.bottom
-        anchors.bottom: footer.top
+        anchors.bottom: analysis.top
         anchors.left: parent.left
-        width: Math.round(Math.min(280, Math.max(190, root.width * 0.20)))
+        width: Math.round(Math.min(250, Math.max(170, root.width * 0.155)))
         eventModel: root.viewModel ? root.viewModel.events : null
     }
     property bool flipping: false
@@ -114,45 +131,22 @@ Rectangle {
             Qt.callLater(function() { root.flipping = false })
         }
     }
-    Rectangle {
-        id: footer
-        height: 36
+    BattleAnalysisPanel {
+        id: analysis
+        // 宽度受限时用地图之外的余高放分析板；高度受限时保留紧凑信息区，将其余空间让给地图。
+        height: Math.round(Math.max(width < 760 ? 184 : 148, Math.min(width < 760 ? 194 : 170,
+            root.height - header.height - (root.width - events.width) / root.mapAspect)))
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        color: "#171f27"
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 16
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.viewModel && root.viewModel.match.fresh
-                  ? "赛事数据已接收 · 图标变淡表示位置过期"
-                  : "等待赛事数据 · 请确认 MQTT 连接已启用"
-            color: "#a4b1bd"
-            font.pixelSize: 12
-            width: parent.width - viewButton.width - 44
-            elide: Text.ElideRight
-        }
-        Rectangle {
-            id: viewButton
-            width: 110
-            height: 27
-            radius: 3
-            anchors.right: parent.right
-            anchors.rightMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            color: "#25323e"
-            Text {
-                anchors.centerIn: parent
-                text: root.blueView ? "蓝方视角 ⇄" : "红方视角 ⇄"
-                color: "#e6edf5"
-                font.pixelSize: 12
-            }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: if (root.viewModel) root.viewModel.blueView = !root.blueView
-            }
-        }
+        match: root.viewModel ? root.viewModel.match : ({})
+        blueView: root.blueView
+        onSwitchViewRequested: if (root.viewModel) root.viewModel.blueView = !root.blueView
+    }
+    MatchPhaseOverlay {
+        anchors.fill: parent
+        phase: root.viewModel ? root.viewModel.phase : ({})
+        match: root.viewModel ? root.viewModel.match : ({})
+        z: 100
     }
 }

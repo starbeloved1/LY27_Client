@@ -196,10 +196,13 @@
       "qos": 1,
       "section": "2.2.19",
       "purpose": "雷达发送的机器人位置信息。",
-      "schema_status": "unresolved",
-      "message": null,
+      "schema_status": "defined",
+      "message": "RadarInfoToClient",
       "frequency": "triggered_or_conditional",
-      "note": "原文外层字段缺少编号且类型矛盾，订阅并原样记录，待官方勘误或实测确认。"
+      "note": "用户授权的本地联调补全：repeated RadarSingleRobotInfo robot_info = 1；恰好八项，按对方1/3/4/7、己方1/3/4/7；坐标cm，10Hz仅为测试频率。原文外层缺字段号且类型矛盾，待官方有效定义后替换。",
+      "schema_origin": "local_provisional",
+      "local_test_hz": 10,
+      "state_ttl_ms": 1000
     },
     {
       "topic": "CustomByteBlock",

@@ -7,8 +7,8 @@ Rectangle {
     readonly property bool narrow: width < 1050
     readonly property real hudScale: narrow ? 1 : width / 1776
     readonly property int total: match.totalRounds > 0 ? match.totalRounds : 3
-    readonly property real hudHeight: narrow ? 232 : 130 * hudScale
-    height: hudHeight + resourcePanel.height
+    readonly property real hudHeight: narrow ? 196 : 114 * hudScale
+    height: hudHeight
     color: "#080c10"
 
     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#28333d" }
@@ -16,13 +16,13 @@ Rectangle {
     Item {
         id: hud
         width: root.narrow ? root.width : 1776
-        height: root.narrow ? 232 : 130
+        height: root.narrow ? 196 : 114
         scale: root.hudScale
         transformOrigin: Item.TopLeft
         Item {
             id: center
             objectName: "matchCenterPanel"
-            width: root.narrow ? 360 : 414
+            width: root.narrow ? 300 : 360
             height: width * 106 / 414
             anchors.horizontalCenter: parent.horizontalCenter
             Image {
@@ -87,13 +87,13 @@ Rectangle {
                 blue: index === 1
                 compact: root.narrow
                 width: root.narrow ? (hud.width - 96) / 2 : (hud.width - center.width - 48) / 2
-                height: root.narrow ? 104 : 120
+                height: root.narrow ? 92 : 104
                 x: blue ? (root.narrow ? hud.width / 2 + 36 : center.x + center.width + 12) : 12
-                y: root.narrow ? 124 : 0
+                y: root.narrow ? 100 : 0
                 teamName: blue ? (root.match.blueTeam || "蓝方队伍") : (root.match.redTeam || "红方队伍")
                 hp: blue ? (root.match.blueBaseHp ?? -1) : (root.match.redBaseHp ?? -1)
                 baseState: blue ? (root.match.blueBaseState ?? -1) : (root.match.redBaseState ?? -1)
-                statusText: blue ? (root.match.blueBaseStatusText || "状态未知") : (root.match.redBaseStatusText || "状态未知")
+                statusText: blue ? (root.match.blueBaseStatusText ?? "状态未知") : (root.match.redBaseStatusText ?? "状态未知")
                 outpostHp: blue ? (root.match.bOutpostHp ?? -1) : (root.match.rOutpostHp ?? -1)
             }
         }
@@ -114,12 +114,5 @@ Rectangle {
                 font.bold: true
             }
         }
-    }
-    MatchResources {
-        id: resourcePanel
-        anchors.left: parent.left
-        anchors.right: parent.right
-        y: root.hudHeight
-        match: root.match
     }
 }

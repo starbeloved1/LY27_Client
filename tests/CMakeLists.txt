@@ -62,4 +62,9 @@ if(LY27_BUILD_DESKTOP)
     add_test(NAME desktop COMMAND test_desktop)
     set_tests_properties(desktop PROPERTIES TIMEOUT 30
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_executable(test_presentation test_presentation.cpp)
+    target_link_libraries(test_presentation PRIVATE ly27_ui Qt6::Test)
+    add_test(NAME presentation COMMAND test_presentation)
+    set_tests_properties(presentation PROPERTIES TIMEOUT 60
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()

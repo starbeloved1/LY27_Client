@@ -4,7 +4,6 @@
  * @details 按官方样式实现:
  *          - 双层血条，视觉与动画沿用 RM26，容量跟随当前赛季上限
  *          - 扣血追血段
- *          - 无敌金边
  *          - 低血量呼吸暗化
  */
 
@@ -16,7 +15,6 @@ Item {
     property int currentHealth: -1
     property int maxHealth: 10000
     property bool isBlue: false
-    property bool invincible: false
     property bool showHealthText: true
     property int deepLayerHealth: Math.round(maxHealth * 0.6)
 
@@ -46,14 +44,12 @@ Item {
     readonly property string lightSource: isBlue ? "images/blue_base_blood/blue_base_blood_top.png" : "images/red_base_blood/red_base_blood_top.png"
     readonly property string borderSource: isBlue ? "images/blue_base_blood/blue_base_blood_border.png" : "images/red_base_blood/red_base_blood_border.png"
     readonly property string glowSource: isBlue ? "images/blue_base_blood/blue_base_blood_light.png" : "images/red_base_blood/red_base_blood_light.png"
-    readonly property string invincibleSource: isBlue ? "images/blue_base_blood/blue_base_blood_invincible.png" : "images/red_base_blood/red_base_blood_invincible.png"
     readonly property string deepTrailSource: isBlue ? "images/blue_base_blood/blue_base_blood_middle_full.png" : "images/red_base_blood/red_base_blood_middle_full.png"
     readonly property string lightTrailSource: isBlue ? "images/blue_base_blood/blue_base_blood_top_full.png" : "images/red_base_blood/red_base_blood_top_full.png"
 
     // 扣血追血段: 用 trailHealth 记录动画前值
     property real trailHealth: clampedHealth
     property real lowHealthPulse: 0
-    property real invinciblePulse: 0
 
     readonly property real trailClampedHealth: Math.max(0, Math.min(safeMaxHealth, trailHealth))
     readonly property real trailDeepHealth: Math.min(trailClampedHealth, deepCapacity)
@@ -103,12 +99,6 @@ Item {
         NumberAnimation { target: root; property: "lowHealthPulse"; to: 0.0; duration: 700; easing.type: Easing.InOutSine }
     }
 
-    SequentialAnimation {
-        running: root.invincible
-        loops: Animation.Infinite
-        NumberAnimation { target: root; property: "invinciblePulse"; to: 1.0; duration: 560; easing.type: Easing.InOutSine }
-        NumberAnimation { target: root; property: "invinciblePulse"; to: 0.0; duration: 560; easing.type: Easing.InOutSine }
-    }
 
     // 缺失血量底图
     Image {
@@ -216,24 +206,6 @@ Item {
         opacity: 0.28
     }
 
-    // 无敌金边
-    Image {
-        // 按素材可见区对齐:
-        // red: x=[44,880), blue: x=[0,836), 可见宽均为836
-        readonly property real nativeW: 880.0
-        readonly property real nativeVisibleW: 836.0
-        readonly property real nativeLeft: root.isBlue ? 0.0 : 44.0
-        readonly property real wScale: nativeW / nativeVisibleW
-        readonly property real hScale: 1.25
-        width: root.width * wScale
-        height: root.height * hScale + 2
-        x: -nativeLeft / nativeW * width
-        y: (root.height - height) * 0.5 - 1
-        source: root.invincibleSource
-        fillMode: Image.Stretch
-        visible: root.invincible
-        opacity: 0.58 + root.invinciblePulse * 0.35
-    }
 
     // 血量数字
     Text {

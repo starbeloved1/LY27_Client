@@ -27,6 +27,16 @@ std::unique_ptr<google::protobuf::Message> createMessage(const QJsonObject &info
 
 QString validatePayload(const QJsonObject &info, const google::protobuf::Message &message)
 {
+    if (const auto *radar = dynamic_cast<const wire::RadarInfoToClient *>(&message)) {
+        if (radar->robot_info_size() != 8)
+            return QStringLiteral("本地暂定雷达格式要求恰好八项，按对方 1/3/4/7、己方 1/3/4/7 排列");
+        for (const auto &entry : radar->robot_info()) {
+            if (!entry.has_target_pos_x() || !entry.has_target_pos_y())
+                return QStringLiteral("雷达目标必须同时携带 x、y 厘米坐标，零坐标也应显式发送");
+            if (entry.has_is_high_light() && entry.is_high_light() > 2)
+                return QStringLiteral("雷达特殊标识必须为 0、1 或 2");
+        }
+    }
     if (info.contains("data_max_bytes")) {
         const auto *field = message.GetDescriptor()->FindFieldByName("data");
         const auto data = message.GetReflection()->GetString(message, field);

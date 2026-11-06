@@ -28,9 +28,22 @@ Rectangle {
         clip: true
         spacing: 8
         boundsBehavior: Flickable.StopAtBounds
+        property bool followTail: true
+        function scrollToTail() {
+            if (followTail) positionViewAtEnd()
+        }
+        function requestTailScroll() {
+            followTail = true
+            Qt.callLater(scrollToTail)
+        }
         // 沿用 26：按收到的顺序追加，新增消息滚动至列表末尾。
-        onCountChanged: Qt.callLater(function() { list.positionViewAtEnd() })
-        onHeightChanged: Qt.callLater(function() { list.positionViewAtEnd() })
+        onCountChanged: requestTailScroll()
+        onHeightChanged: requestTailScroll()
+        onWidthChanged: requestTailScroll()
+        // 窗口变窄后长事件会重新换行，等委托高度更新再对齐列表末尾。
+        onContentHeightChanged: if (followTail) Qt.callLater(scrollToTail)
+        // 用户主动查看历史时，不因委托高度重新估算而跳回最新事件。
+        onMovementStarted: followTail = false
         delegate: Rectangle {
             id: row
             required property int index

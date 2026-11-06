@@ -46,6 +46,13 @@ private slots:
         QTest::newRow("buffer") << 14 << "" << "重装战亡临时激活，进入强制退出缓冲期";
         QTest::newRow("assembly") << 15 << "0" << "装配成功";
         QTest::newRow("assembly-death") << 15 << "4" << "重装战亡，装配失败";
+        QTest::newRow("assembly-unplug") << 15 << "1" << "能量单元拔出，装配失败";
+        QTest::newRow("assembly-timeout") << 15 << "2" << "装配超时，装配失败";
+        QTest::newRow("assembly-leave") << 15 << "3" << "离开装配区过久，装配失败";
+        QTest::newRow("assembly-cooperate") << 15 << "5" << "四级难度未满足协作时限，装配失败";
+        QTest::newRow("assembly-exit") << 15 << "6" << "主动退出装配";
+        QTest::newRow("assembly-empty") << 15 << "7" << "装配完成但未检测到能量单元";
+        QTest::newRow("assembly-forced") << 15 << "8" << "缓冲期到期，装配流程强制结束";
         QTest::newRow("module") << 16 << "" << "重装机器人成功安装模块化42mm发射机构";
         QTest::newRow("malformed") << 1 << "1,999999999999" << "事件 #1：1,999999999999";
         QTest::newRow("invalid-control") << 5 << "100" << "事件 #5：100";
@@ -71,7 +78,7 @@ private slots:
         QVERIFY(sendEvent(store, 1, "1,101", now)); QVERIFY(sendEvent(store, 1, "1,101", now));
         QCOMPARE(model.rowCount(), 2);
         QCOMPARE(value(model, 0, ly27::EventListModel::Time), QString("04:47"));
-        QCOMPARE(value(model, 0, ly27::EventListModel::Color), QString("#ef6868"));
+        QCOMPARE(value(model, 0, ly27::EventListModel::Color), QString("#FF737A"));
         QVERIFY(sendEvent(store, 1, "101,1", now));
         QCOMPARE(value(model, 2, ly27::EventListModel::Color), QString("#60D8B7"));
         now += 5000000000LL; store.refresh(); QCOMPARE(model.rowCount(), 3);
@@ -101,6 +108,59 @@ private slots:
         QVERIFY(sendEvent(store, 99, QString(5000, 'x'), now));
         QVERIFY(value(model, 49).size() < 300);
         now += 10000000000LL; store.refresh(); QCOMPARE(model.rowCount(), 50);
+    }
+    void incomeUsesTotalCounterAndIgnoresSpendingMissingRetainedAndReconnect()
+    {
+        qint64 now = 1000000000;
+        ly27::StateStore store(identity(), nullptr, [&] { return now; }); store.reset("income"); store.setConnected(true);
+        ly27::EventListModel model(store, ly27::Team::Red);
+        ly27::wire::GameStatus g; g.set_current_round(1); g.set_current_stage(4); g.set_stage_countdown_sec(419);
+        QVERIFY(apply(store, g, now));
+        ly27::wire::GlobalLogisticsStatus l; l.set_total_economy_obtained(0); l.set_remaining_economy(0);
+        QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 0);
+        l.set_total_economy_obtained(800); l.set_remaining_economy(800); now += 100000000;
+        QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(value(model, 0), QString("获得800金币"));
+        QCOMPARE(value(model, 0, ly27::EventListModel::Color), QString("#FFFFFF"));
+        QCOMPARE(value(model, 0, ly27::EventListModel::Time), QString("06:59"));
+        QCOMPARE(model.data(model.index(0, 0), ly27::EventListModel::EventId).toInt(), 0);
+        QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 1);
+        l.set_remaining_economy(100); QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 1);
+        // 收入与消费同时发生导致余额降低时，累计收入仍能反映真实增量。
+        l.set_total_economy_obtained(900); l.set_remaining_economy(20); QVERIFY(apply(store, l, now));
+        QCOMPARE(model.rowCount(), 2); QCOMPARE(value(model, 1), QString("获得100金币"));
+        l.set_total_economy_obtained(5); QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 2);
+        l.clear_total_economy_obtained(); QVERIFY(apply(store, l, now));
+        l.set_total_economy_obtained(1000); QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 2);
+        l.set_total_economy_obtained(1500); QVERIFY(apply(store, l, now, true)); QCOMPARE(model.rowCount(), 2);
+        l.set_total_economy_obtained(2000); QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 2);
+        store.setConnected(false); store.setConnected(true);
+        QVERIFY(apply(store, g, now)); l.set_total_economy_obtained(3000); QVERIFY(apply(store, l, now));
+        QCOMPARE(model.rowCount(), 2);
+        l.set_total_economy_obtained(3100); QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 3);
+        now += 4000000000LL; QVERIFY(apply(store, g, now));
+        l.set_total_economy_obtained(9000); QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 3);
+        // 界面后创建时只建立当前收入基线，不把历史总额作为新收入。
+        ly27::EventListModel late(store, ly27::Team::Red); QCOMPARE(late.rowCount(), 0);
+        l.set_total_economy_obtained(9100); QVERIFY(apply(store, l, now));
+        QCOMPARE(late.rowCount(), 1); QCOMPARE(value(late, 0), QString("获得100金币"));
+        g.set_current_round(2); QVERIFY(apply(store, g, now)); QCOMPARE(model.rowCount(), 0);
+        l.set_total_economy_obtained(0); QVERIFY(apply(store, l, now));
+        l.set_total_economy_obtained(800); QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 1);
+        g.set_current_stage(5); QVERIFY(apply(store, g, now));
+        l.set_total_economy_obtained(900); QVERIFY(apply(store, l, now)); QCOMPARE(model.rowCount(), 1);
+        store.reset("new-income"); QCOMPARE(model.rowCount(), 0);
+    }
+    void incomeDeltaKeepsUint64Precision()
+    {
+        qint64 now = 1000000000;
+        ly27::StateStore store(identity(), nullptr, [&] { return now; }); store.reset("large-income"); store.setConnected(true);
+        ly27::EventListModel model(store, ly27::Team::Red);
+        ly27::wire::GameStatus g; g.set_current_stage(4); QVERIFY(apply(store, g, now));
+        ly27::wire::GlobalLogisticsStatus l;
+        l.set_total_economy_obtained(9007199254740993ULL); QVERIFY(apply(store, l, now));
+        l.set_total_economy_obtained(9007199254740994ULL); QVERIFY(apply(store, l, now));
+        QCOMPARE(model.rowCount(), 1); QCOMPARE(value(model, 0), QString("获得1金币"));
     }
 };
 QTEST_GUILESS_MAIN(EventTest)

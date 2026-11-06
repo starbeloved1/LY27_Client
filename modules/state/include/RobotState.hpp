@@ -22,6 +22,8 @@ struct PositionState {
     StateField<float> z;
     StateField<float> yawDegrees;
     StateField<quint32> reportedRobotId;
+    // 雷达特殊标识：0 无、1 有、2 有且定位模块离线；来源仍为雷达消息。
+    StateField<quint32> specialMark;
 };
 
 // 各模块状态

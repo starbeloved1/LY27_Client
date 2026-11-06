@@ -30,6 +30,62 @@ bool send(ly27::StateStore &store, const google::protobuf::Message &message, qin
 class StateModelsTest : public QObject {
     Q_OBJECT
 private slots:
+    void radarOrderUnitsSourceSelectionAndLifecycle()
+    {
+        for (const auto team : {ly27::Team::Red, ly27::Team::Blue}) {
+            qint64 now = 1000000000;
+            ly27::StateStore store(identity(ly27::Role::Infantry, team), nullptr, [&now] { return now; });
+            store.reset("radar"); store.setConnected(true);
+            ly27::wire::RadarInfoToClient radar;
+            for (int i = 0; i < 8; ++i) {
+                auto *entry = radar.add_robot_info();
+                entry->set_target_pos_x(i * 100); entry->set_target_pos_y(i * 50);
+                entry->set_is_high_light(i % 3);
+            }
+            QVERIFY(send(store, radar, now));
+            const int ally = team == ly27::Team::Red ? 0 : 100;
+            const int enemy = ally == 0 ? 100 : 0;
+            const int ids[] = {enemy+1, enemy+3, enemy+4, enemy+7, ally+1, ally+3, ally+4, ally+7};
+            for (int i = 0; i < 8; ++i) {
+                const auto p = store.robot(ids[i])->position;
+                QVERIFY(p.x.isFresh());
+                QCOMPARE(*p.x.value, float(i)); QCOMPARE(*p.y.value, float(i) / 2);
+                QCOMPARE(*p.specialMark.value, quint32(i % 3));
+                QCOMPARE(p.x.source.topic, QString("RadarInfoToClient"));
+                QVERIFY(!p.yawDegrees.value); QVERIFY(!p.z.value);
+            }
+            now += 100000000;
+            ly27::wire::RobotPosition direct;
+            direct.set_robot_id(ally+3); direct.set_x(9); direct.set_y(8); direct.set_yaw(45);
+            QVERIFY(send(store, direct, now));
+            QCOMPARE(*store.robot(ally+3)->position.x.value, 9.0f);
+            now += 100000000;
+            QVERIFY(send(store, radar, now));
+            QCOMPARE(*store.robot(ally+3)->position.x.value, 5.0f);
+            QCOMPARE(*store.robot(ally+3)->position.yawDegrees.value, 45.0f);
+            now += 100000000;
+            radar.mutable_robot_info(5)->set_target_pos_x(999);
+            QVERIFY(send(store, radar, now, true));
+            // retained 雷达不能覆盖仍新鲜的实时单机位置。
+            QCOMPARE(*store.robot(ally+3)->position.x.value, 9.0f);
+            QVERIFY(!store.robot(enemy+1)->position.x.isFresh());
+            QVERIFY(send(store, radar, now));
+            now += 1000000000;
+            store.refresh();
+            QVERIFY(!store.robot(enemy+1)->position.x.isFresh());
+            QCOMPARE(store.robot(enemy+1)->position.x.source.validity, ly27::StateValidity::Stale);
+            store.setConnected(false);
+            QCOMPARE(store.robot(enemy+1)->position.x.source.validity, ly27::StateValidity::Disconnected);
+            store.setConnected(true);
+            QVERIFY(!store.robot(enemy+1)->position.x.isFresh());
+            QVERIFY(send(store, radar, now));
+            ly27::wire::GameStatus round;
+            round.set_current_round(1); QVERIFY(send(store, round, now));
+            round.set_current_round(2); QVERIFY(send(store, round, now));
+            QVERIFY(!store.robot(enemy+1)->position.x.value);
+        }
+    }
+
     void matchPresenceAndExactEconomy()
     {
         qint64 now = 1000000000;

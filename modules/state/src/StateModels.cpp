@@ -266,6 +266,17 @@ std::optional<RobotState> StateStore::robot(int robotId) const
         result.position.yawDegrees = field(p->has_yaw(), p->yaw(), s);
         result.position.reportedRobotId = field(p->has_robot_id(), p->robot_id(), s);
     }
+    const auto radarSample = records.value("RadarInfoToClient");
+    if (const auto *p = dynamic_cast<const wire::RadarSingleRobotInfo *>(radarSample.message.get())) {
+        const auto s = source(radarSample, now);
+        const auto x = field(p->has_target_pos_x(), static_cast<float>(p->target_pos_x()) / 100.0f, s);
+        const auto y = field(p->has_target_pos_y(), static_cast<float>(p->target_pos_y()) / 100.0f, s);
+        // 先选新鲜来源，再比较接收时间；雷达不携带高度和朝向，不覆盖这两个字段。
+        const bool newer = radarSample.monotonicNs >= sample.monotonicNs;
+        result.position.x = newer ? choose(x, result.position.x) : choose(result.position.x, x);
+        result.position.y = newer ? choose(y, result.position.y) : choose(result.position.y, y);
+        result.position.specialMark = field(p->has_is_high_light(), p->is_high_light(), s);
+    }
     sample = records.value("RobotRespawnStatus");
     if (const auto *p = dynamic_cast<const wire::RobotRespawnStatus *>(sample.message.get())) {
         const auto s = source(sample, now);

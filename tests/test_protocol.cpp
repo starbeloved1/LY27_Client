@@ -15,14 +15,14 @@ private slots:
         const auto topics = ly27::MessageCodec::inboundTopics();
         QCOMPARE(topics.size(), 23);
         QCOMPARE(QSet<QString>(topics.begin(), topics.end()).size(), 23);
-        int unresolved = 0;
+        int provisional = 0;
         for (const auto &entry : entries) {
             const auto info = entry.toObject();
             const auto topic = info["topic"].toString();
-            if (info["schema_status"] == "unresolved") {
+            QCOMPARE(info["schema_status"].toString(), QString("defined"));
+            if (info["schema_origin"] == "local_provisional") {
                 QCOMPARE(topic, QString("RadarInfoToClient"));
-                ++unresolved;
-                continue;
+                ++provisional;
             }
             const auto name = "ly27.wire." + info["message"].toString();
             const auto *descriptor = google::protobuf::DescriptorPool::generated_pool()
@@ -35,10 +35,11 @@ private slots:
             if (info["direction"] == "inbound") {
                 const auto decoded = ly27::MessageCodec::decode(topic, {});
                 // 官方标量均为 optional，空消息合法，但不代表业务数据已经有效。
-                QVERIFY2(decoded.isParsed(), qPrintable(topic + ": " + decoded.error));
+                if (topic == "RadarInfoToClient") QCOMPARE(decoded.status, QString("invalid_payload"));
+                else QVERIFY2(decoded.isParsed(), qPrintable(topic + ": " + decoded.error));
             }
         }
-        QCOMPARE(unresolved, 1);
+        QCOMPARE(provisional, 1);
     }
 
     void knownWirePayloads()
@@ -92,14 +93,40 @@ private slots:
         QVERIFY(!error.isEmpty());
     }
 
-    void invalidAndUnresolvedMessages()
+    void provisionalRadarWireAndValidation()
+    {
+        // 固定线格式：外层字段 1、单体字段 x=1/y=2/标识=3，防止两端共同改错后互相自洽。
+        const auto bytes = QByteArray::fromHex("0a06080710091800").repeated(8);
+        const auto decoded = ly27::MessageCodec::decode("RadarInfoToClient", bytes);
+        QVERIFY(decoded.isParsed());
+        const auto *radar = dynamic_cast<const ly27::wire::RadarInfoToClient *>(decoded.message.get());
+        QVERIFY(radar);
+        QCOMPARE(radar->robot_info_size(), 8);
+        QCOMPARE(radar->robot_info(0).target_pos_x(), quint32(7));
+        QCOMPARE(radar->robot_info(0).target_pos_y(), quint32(9));
+        QCOMPARE(QByteArray::fromStdString(radar->SerializeAsString()), bytes);
+        auto wrong = *radar;
+        wrong.mutable_robot_info()->RemoveLast();
+        QCOMPARE(ly27::MessageCodec::decode("RadarInfoToClient", QByteArray::fromStdString(wrong.SerializeAsString())).status,
+                 QString("invalid_payload"));
+        wrong = *radar;
+        wrong.mutable_robot_info(0)->clear_target_pos_y();
+        QCOMPARE(ly27::MessageCodec::decode("RadarInfoToClient", QByteArray::fromStdString(wrong.SerializeAsString())).status,
+                 QString("invalid_payload"));
+        wrong = *radar;
+        wrong.mutable_robot_info(0)->set_is_high_light(3);
+        QCOMPARE(ly27::MessageCodec::decode("RadarInfoToClient", QByteArray::fromStdString(wrong.SerializeAsString())).status,
+                 QString("invalid_payload"));
+    }
+
+    void invalidMessages()
     {
         QCOMPARE(ly27::MessageCodec::decode("GameStatus", QByteArray::fromHex("80")).status, QString("malformed"));
         QCOMPARE(ly27::MessageCodec::decode("Other", {}).status, QString("unknown_topic"));
         QCOMPARE(ly27::MessageCodec::decode("AssemblyCommand", {}).status, QString("wrong_direction"));
         QCOMPARE(ly27::MessageCodec::decode("GameStatus", QByteArray(1024 * 1024 + 1, 'x')).status, QString("oversized"));
         const auto radar = ly27::MessageCodec::decode("RadarInfoToClient", QByteArray::fromHex("0a03080102"));
-        QCOMPARE(radar.status, QString("unresolved_schema"));
+        QCOMPARE(radar.status, QString("malformed"));
         QVERIFY(!radar.message);
         QVERIFY(radar.fields.isEmpty());
         ly27::wire::GameStatus wrong;

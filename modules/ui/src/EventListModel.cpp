@@ -2,11 +2,12 @@
 
 #include <QDateTime>
 #include <cmath>
+#include <utility>
 
 namespace ly27 {
 namespace {
 const QString normal = QStringLiteral("#E5E5E5");
-const QString danger = QStringLiteral("#ef6868");
+const QString danger = QStringLiteral("#FF737A");
 const QString success = QStringLiteral("#60D8B7");
 QString robotName(int id)
 {
@@ -36,6 +37,7 @@ EventListModel::EventListModel(const StateStore &store, Team team, QObject *pare
     // 晚于后端创建视图时恢复已有历史，不用当前比赛时间伪造过去的事件时间。
     for (const auto &notice : store.notifications())
         if (const auto *event = std::get_if<EventNotice>(&notice)) append(*event, false);
+    observe({});
     connect(&store, &StateStore::changed, this, &EventListModel::observe);
 }
 int EventListModel::rowCount(const QModelIndex &parent) const
@@ -65,16 +67,29 @@ void EventListModel::clear()
 {
     if (!m_rows.isEmpty()) { beginResetModel(); m_rows.clear(); endResetModel(); }
     m_session.clear();
+    m_totalEconomy.reset();
+    m_economySource = {};
 }
 void EventListModel::observe(const QString &topic)
 {
-    if (topic != QStringLiteral("Event") && !topic.isEmpty()) return;
+    if (!topic.isEmpty() && topic != "Event" && topic != "GameStatus" && topic != "GlobalLogisticsStatus") return;
     const auto event = m_store.roleState().lastEvent;
-    if (!event.id.source.received) { clear(); return; }
+    const auto game = m_store.matchState();
+    const auto economy = m_store.globalState().logistics.totalEconomyObtained;
+    const StateSource *context = nullptr;
+    for (const auto *candidate : {&event.id.source, &game.stage.source, &economy.source}) {
+        if (candidate->received && (!context || candidate->connection > context->connection ||
+            (candidate->connection == context->connection && candidate->receivedMonotonicNs >= context->receivedMonotonicNs)))
+            context = candidate;
+    }
+    if (!context) { clear(); return; }
+    if (m_session != context->sessionId || m_roundRevision != context->roundRevision) clear();
+    m_session = context->sessionId;
+    m_roundRevision = context->roundRevision;
+    if (topic == "GlobalLogisticsStatus" || topic.isEmpty()) observeEconomy();
     if (topic != QStringLiteral("Event")) return;
     const auto &source = event.id.source;
     if (source.validity != StateValidity::Observed || source.retained) return;
-    if (m_session != source.sessionId || m_roundRevision != source.roundRevision) clear();
     // 不按内容或时间去重：两次相同的合法事件仍是两条通知。
     append(event, true);
 }
@@ -82,9 +97,13 @@ void EventListModel::append(const EventNotice &event, bool live)
 {
     const auto &source = event.id.source;
     if (!event.id.value || !source.received || source.retained) return;
+    auto row = describe(*event.id.value, event.parameter.value.value_or(QString{}));
+    appendRow(std::move(row), source, live);
+}
+void EventListModel::appendRow(Row row, const StateSource &source, bool live)
+{
     m_session = source.sessionId;
     m_roundRevision = source.roundRevision;
-    auto row = describe(*event.id.value, event.parameter.value.value_or(QString{}));
     const auto game = m_store.matchState();
     const auto &time = game.remainingSeconds;
     if (live && time.isFresh() && *time.value >= 0 && time.source.sessionId == source.sessionId &&
@@ -100,6 +119,29 @@ void EventListModel::append(const EventNotice &event, bool live)
         beginRemoveRows({}, 0, 0); m_rows.removeFirst(); endRemoveRows();
     }
     beginInsertRows({}, m_rows.size(), m_rows.size()); m_rows.append(row); endInsertRows();
+}
+void EventListModel::observeEconomy()
+{
+    const auto total = m_store.globalState().logistics.totalEconomyObtained;
+    if (!total.isFresh()) { m_totalEconomy.reset(); return; }
+    const auto &s = total.source;
+    const bool continuous = m_totalEconomy && s.sessionId == m_economySource.sessionId &&
+        s.connection == m_economySource.connection && s.roundRevision == m_economySource.roundRevision &&
+        s.receivedMonotonicNs >= m_economySource.receivedMonotonicNs &&
+        s.receivedMonotonicNs - m_economySource.receivedMonotonicNs < s.ttlMs.value_or(3000) * 1000000;
+    const auto game = m_store.matchState();
+    if (continuous && *total.value > *m_totalEconomy && game.stage.isFresh() &&
+        *game.stage.value == GameStage::Battle && game.stage.source.connection == s.connection &&
+        game.stage.source.roundRevision == s.roundRevision) {
+        Row row;
+        row.text = QStringLiteral("获得%1金币").arg(*total.value - *m_totalEconomy);
+        row.color = QStringLiteral("#FFFFFF");
+        row.parameter = QString::number(*total.value - *m_totalEconomy);
+        // 本地收入观测使用编号 0，与官方 Event 1–16 分开。
+        appendRow(std::move(row), s, true);
+    }
+    m_totalEconomy = total.value;
+    m_economySource = s;
 }
 EventListModel::Row EventListModel::describe(int id, const QString &parameter) const
 {
@@ -192,7 +234,7 @@ EventListModel::Row EventListModel::describe(int id, const QString &parameter) c
         }
         break;
     }
-    case 16: row.text = QStringLiteral("重装机器人成功安装模块化42mm发射机构"); break;
+    case 16: row.text = QStringLiteral("重装机器人成功安装模块化42mm发射机构"); row.color = success; break;
     }
     return row;
 }
