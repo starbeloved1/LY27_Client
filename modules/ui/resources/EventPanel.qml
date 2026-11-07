@@ -7,15 +7,12 @@ Rectangle {
     property var eventModel: null
     readonly property bool cramped: width < 180
     color: Theme.panel
+    SectionTitle { id: title; x: 12; y: 11; text: "战场事件" }
     UiText {
-        x: 12; y: 12
-        text: "战场事件"; color: Theme.text; font.pixelSize: Theme.heading; font.bold: true
-    }
-    UiText {
-        anchors.right: parent.right; anchors.rightMargin: 12; y: 15
+        anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: title.verticalCenter
         text: list.count; color: Theme.secondary; font.pixelSize: Theme.caption; numeric: true
     }
-    Rectangle { x: 12; y: 42; width: parent.width - 24; height: 1; color: Theme.divider }
+    Rectangle { x: 12; y: 42; width: parent.width - 24; height: 1; color: Theme.hairline }
     ListView {
         id: list
         objectName: "eventList"
@@ -47,7 +44,7 @@ Rectangle {
             readonly property bool territory: eventId >= 5 && eventId <= 8
             width: ListView.view.width
             height: Math.max(40, message.implicitHeight + (root.cramped ? 36 : 18))
-            Rectangle { width: parent.width; height: 1; anchors.bottom: parent.bottom; color: Theme.divider; opacity: .7 }
+            Rectangle { width: parent.width; height: 1; anchors.bottom: parent.bottom; color: Theme.hairline }
             UiText {
                 x: 0; y: 10; width: 50; height: 16
                 text: row.eventTime; color: Theme.muted; font.pixelSize: Theme.caption; numeric: true

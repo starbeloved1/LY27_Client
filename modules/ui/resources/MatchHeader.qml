@@ -8,21 +8,16 @@ Rectangle {
     readonly property bool narrow: width < 1050
     readonly property real hudScale: narrow ? 1 : width / 1776
     readonly property int total: match.totalRounds > 0 ? match.totalRounds : 3
-    readonly property real hudHeight: narrow ? 188 : 114 * hudScale
+    readonly property real hudHeight: narrow ? 166 : 96 * hudScale
     height: hudHeight
     color: Theme.background
 
-    Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.divider }
-    TechPanel {
-        anchors.fill: parent; anchors.margins: 4
-        cut: 6
-        fill: Theme.panel; line: Theme.divider
-    }
+    // 顶栏是机壳上的 HUD 带：直接落在底色上，不另画面板与分隔线，下方各块面板以自身底色起边。
     // 宽屏整体按同一比例缩放，队徽、侧翼和中间面板保持原来的衔接关系。
     Item {
         id: hud
         width: root.narrow ? root.width : 1776
-        height: root.narrow ? 188 : 114
+        height: root.narrow ? 166 : 96
         scale: root.hudScale
         transformOrigin: Item.TopLeft
         Item {
@@ -79,18 +74,6 @@ Rectangle {
                 }
             }
         }
-        UiText {
-            objectName: "matchStage"
-            anchors.horizontalCenter: center.horizontalCenter
-            anchors.top: center.bottom
-            anchors.topMargin: 0
-            width: center.width; height: 18
-            text: root.match.stage || "等待比赛数据"
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            color: root.match.paused ? Theme.tactical : Theme.secondary
-            font.pixelSize: 12
-        }
         Repeater {
             model: 2
             delegate: BaseHealthWing {
@@ -100,10 +83,19 @@ Rectangle {
                 width: root.narrow ? (hud.width - 96) / 2 : (hud.width - center.width - 48) / 2
                 height: root.narrow ? 92 : 104
                 x: blue ? (root.narrow ? hud.width / 2 + 36 : center.x + center.width + 12) : 12
-                y: root.narrow ? 100 : 0
+                y: root.narrow ? 86 : 0
+                nameMinimumX: blue || root.narrow ? 0 : (stage.x + stage.width + 12) / root.hudScale - x
                 teamName: blue ? (root.match.blueTeam || "蓝方队伍") : (root.match.redTeam || "红方队伍")
                 hp: blue ? (root.match.blueBaseHp ?? -1) : (root.match.redBaseHp ?? -1)
             }
         }
+    }
+    UiText {
+        id: stage
+        objectName: "matchStage"
+        x: 12; y: 6; width: 148; height: 20
+        text: root.match.stage || "等待比赛数据"
+        color: "#ffffff"; font.pixelSize: 14
+        verticalAlignment: Text.AlignVCenter
     }
 }

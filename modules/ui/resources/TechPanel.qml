@@ -10,6 +10,8 @@ Item {
     property color line: Theme.border
     property real fillOpacity: 1
     property real lineWidth: 1
+    // 顶边高光：沿切角斜边与上沿画一道细亮线，读成“凸起的面”而不是线框；透明时不绘制。
+    property color sheen: "transparent"
     // 切角不得大于短边的 12%，否则小尺寸件会退化成三角形。
     readonly property real cornerCut: Math.min(root.cut, Math.min(width, height) * .12)
     default property alias content: holder.data
@@ -44,6 +46,15 @@ Item {
                 ctx.strokeStyle = Qt.rgba(root.line.r, root.line.g, root.line.b, root.line.a)
                 ctx.stroke()
             }
+            if (root.sheen.a > 0) {
+                ctx.beginPath()
+                ctx.moveTo(.5, c + .5)
+                ctx.lineTo(c + .5, .5)
+                ctx.lineTo(w, .5)
+                ctx.lineWidth = 1
+                ctx.strokeStyle = Qt.rgba(root.sheen.r, root.sheen.g, root.sheen.b, root.sheen.a)
+                ctx.stroke()
+            }
         }
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
@@ -53,6 +64,7 @@ Item {
             function onLineChanged() { canvas.requestPaint() }
             function onFillOpacityChanged() { canvas.requestPaint() }
             function onLineWidthChanged() { canvas.requestPaint() }
+            function onSheenChanged() { canvas.requestPaint() }
             function onCutChanged() { canvas.requestPaint() }
         }
     }

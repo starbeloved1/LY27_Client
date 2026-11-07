@@ -25,15 +25,16 @@ Item {
         anchors.fill: parent
         cut: 4
         fill: Theme.raised
-        line: Theme.border
+        line: "transparent"
+        sheen: Theme.sheen
     }
     UiText {
         id: titleText
         objectName: root.metric + "Title"
         x: 12; y: 5
-        width: root.showNetRate ? Math.min(100, root.width * .40) : root.width - 24
+        width: root.showNetRate ? Math.min(112, root.width * .40) : root.width - 24
         height: 18
-        text: root.title; color: Theme.secondary; font.pixelSize: Theme.caption
+        text: root.title; color: Theme.secondary; font.pixelSize: 13
         font.bold: true
         verticalAlignment: Text.AlignVCenter
         fontSizeMode: Text.Fit; minimumPixelSize: 9
@@ -44,7 +45,7 @@ Item {
         x: titleText.x + titleText.width + 8; y: titleText.y
         width: Math.max(0, parent.width - x - 12); height: titleText.height
         text: "我方净增速  " + root.rateText(root.netRate)
-        color: root.rateColor(root.netRate); font.pixelSize: Theme.caption
+        color: root.rateColor(root.netRate); font.pixelSize: 13
         fontSizeMode: Text.Fit; minimumPixelSize: 9
         horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
     }
@@ -58,14 +59,14 @@ Item {
             required property var modelData
             readonly property bool hasValue: modelData.value >= 0
             x: 12 + index * (root.width - 16) / 2
-            y: 25
+            y: 28
             width: (root.width - 32) / 2
             height: root.height - y - 8
             UiText {
                 objectName: modelData.prefix + root.metric + "Label"
-                x: 10; height: 14; width: parent.width - 10
+                x: 10; height: 16; width: parent.width - 10
                 text: modelData.label; color: hasValue ? modelData.accent : Theme.unknown
-                font.pixelSize: Theme.caption
+                font.pixelSize: 12
             }
             // 阵营圆点降到半透明，让大数字独占版面重量。
             Rectangle {
@@ -74,17 +75,17 @@ Item {
             }
             UiText {
                 objectName: modelData.prefix + root.metric + "Value"
-                y: 14; width: parent.width; height: Math.max(22, parent.height - 22)
+                y: 18; width: parent.width; height: Math.max(22, parent.height - 26)
                 text: hasValue ? String(modelData.value) : "—"
                 color: hasValue ? Theme.text : Theme.unknown
-                numeric: true; font.pixelSize: Theme.numberLarge; font.bold: true
+                numeric: true; font.pixelSize: 42; font.bold: true
                 font.letterSpacing: -.6
                 // 极大累计值仍显示完整数字，不把协议数值格式化为不精确的缩写。
                 fontSizeMode: Text.Fit; minimumPixelSize: 11
                 verticalAlignment: Text.AlignVCenter
             }
             Rectangle {
-                y: parent.height - 3; width: parent.width; height: 3; radius: 1
+                y: parent.height - 4; width: parent.width; height: 4; radius: 1
                 color: hasValue ? Theme.divider : "transparent"
                 border.width: hasValue ? 0 : 1; border.color: Theme.border
                 Rectangle {

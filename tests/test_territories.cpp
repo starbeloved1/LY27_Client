@@ -262,7 +262,8 @@ private slots:
     {
         ly27::TerritoryOverlayItem overlay; overlay.setAnimating(false);
         overlay.setSize({1662, 946}); QCOMPARE(overlay.regionCount(), 6);
-        const QPointF centers[]{{667, 685}, {1028, 237}, {171, 461}, {415, 461}, {1514, 464}, {1281, 461}};
+        // 前哨阵地取建筑旁的增益带内部点，而非不属于道路带的建筑本体。
+        const QPointF centers[]{{707, 690}, {985, 237}, {171, 461}, {415, 461}, {1514, 464}, {1281, 461}};
         QPainterPath allowed;
         for (int i = 0; i < 6; ++i) {
             auto path = overlay.regionPath(i);
@@ -275,8 +276,18 @@ private slots:
             QCOMPARE(mirror.boundingRect().topLeft(), QPointF(1662 - path.boundingRect().right(), 946 - path.boundingRect().bottom()));
             overlay.setBlueView(false);
         }
+        // 核对图 5-23 的道路直段、两端窄带和本体凹口，不假设两侧严格镜像。
         QVERIFY(overlay.regionPath(0).contains(QPointF(655, 461)));
-        QVERIFY(overlay.regionPath(1).contains(QPointF(1040, 461)));
+        QVERIFY(overlay.regionPath(0).contains(QPointF(755, 205)));
+        QVERIFY(overlay.regionPath(0).contains(QPointF(675, 725)));
+        QVERIFY(overlay.regionPath(1).contains(QPointF(1037, 485)));
+        QVERIFY(overlay.regionPath(1).contains(QPointF(1025, 188)));
+        QVERIFY(overlay.regionPath(1).contains(QPointF(935, 720)));
+        QVERIFY(!overlay.regionPath(0).contains(QPointF(667, 685)));
+        QVERIFY(!overlay.regionPath(1).contains(QPointF(1028, 237)));
+        for (const auto &point : {QPointF(620, 461), QPointF(706, 461), QPointF(990, 461),
+                 QPointF(1080, 461), QPointF(850, 461), QPointF(545, 461), QPointF(1145, 461)})
+            QVERIFY(!allowed.contains(point)); // 不吞并路外、中央平台和独立地形跨越增益点。
         QVERIFY(!allowed.contains(QPointF(320, 461))); // 基地与堡垒间的道路不合并。
         QPainterPathStroker glow; glow.setWidth(18);
         glow.setJoinStyle(Qt::RoundJoin); glow.setCapStyle(Qt::RoundCap);

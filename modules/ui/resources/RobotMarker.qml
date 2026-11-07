@@ -17,11 +17,19 @@ Item {
     property var buffs: []
     property real mapWidth: 0
     property real mapHeight: 0
+    property real visualScale: 1
+    readonly property real localScale: Math.max(visualScale, 0.000001)
+    readonly property real localMapX: x / localScale
+    readonly property real localMapY: y / localScale
+    readonly property real localMapWidth: mapWidth / localScale
+    readonly property real localMapHeight: mapHeight / localScale
     readonly property color markerColor: self ? Theme.selfFill : (blue ? Theme.teamBlueFill : Theme.teamRedFill)
     readonly property color affiliationColor: self ? Theme.selfGreen : (blue ? Theme.teamBlue : Theme.teamRed)
     readonly property bool ratioKnown: healthKnown && ratio >= 0
     readonly property color frameColor: ratioKnown ? Theme.ink : Theme.unknown
     width: 1; height: 1; z: 3
+    scale: visualScale
+    transformOrigin: Item.TopLeft
     MouseArea {
         objectName: "robotMapHitArea"
         x: -22; y: -26; width: 44; height: 46
@@ -62,26 +70,25 @@ Item {
         NumberAnimation { target: selfRing; property: "opacity"; from: 1; to: .60; duration: 700; easing.type: Easing.InOutSine }
         NumberAnimation { target: selfRing; property: "opacity"; to: 1; duration: 700; easing.type: Easing.InOutSine }
     }
-    // 带暗色轮廓的楔形与圆边相接，绕定位中心旋转，数字保持正向。
+    // 白色扁三角与车身留出小间隙，底边沿同心圆弧收口，绕车身中心旋转。
     Item {
         width: 1; height: 1; rotation: root.angle
+        transformOrigin: Item.TopLeft
         Canvas {
             objectName: "robotHeadingWedge"
-            x: -6.5; y: -28; width: 13; height: 12
+            x: -11; y: -28; width: 22; height: 10
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
+                const cx = 11, cy = 28
+                const radius = 23, halfAngle = 0.45
                 ctx.beginPath()
-                ctx.moveTo(width / 2, 1)
-                ctx.lineTo(width - 1.5, height - 1)
-                ctx.lineTo(1.5, height - 1)
+                ctx.moveTo(cx, cy - 27)
+                ctx.lineTo(cx + radius * Math.sin(halfAngle), cy - radius * Math.cos(halfAngle))
+                ctx.arc(cx, cy, radius, -Math.PI / 2 + halfAngle, -Math.PI / 2 - halfAngle, true)
                 ctx.closePath()
-                ctx.fillStyle = Theme.headingInk
+                ctx.fillStyle = "#ffffff"
                 ctx.fill()
-                ctx.strokeStyle = Theme.ink
-                ctx.lineWidth = 1.2
-                ctx.lineJoin = "round"
-                ctx.stroke()
             }
         }
     }
@@ -123,10 +130,10 @@ Item {
         width: 56; height: 12
         readonly property real groupWidth: Math.max(width, buffIcons.width)
         // 血条本体对中车标，等级格附在左侧；边缘处仍收拢完整 Buff 行。
-        x: Math.max(2 - root.x, Math.min(-(width + rank.width) / 2, root.mapWidth - root.x - groupWidth - 2))
+        x: Math.max(2 - root.localMapX, Math.min(-(width + rank.width) / 2, root.localMapWidth - root.localMapX - groupWidth - 2))
         readonly property real buffHeight: root.buffs.length ? 16 : 0
-        y: Math.max(2 - root.y + buffHeight, Math.min(root.y < 42 + buffHeight ? 21 + buffHeight
-            : -40, root.mapHeight - root.y - height - 2))
+        y: Math.max(2 - root.localMapY + buffHeight, Math.min(root.localMapY < 42 + buffHeight ? 21 + buffHeight
+            : -40, root.localMapHeight - root.localMapY - height - 2))
         Rectangle {
             id: rank
             objectName: "robotLevelCell"

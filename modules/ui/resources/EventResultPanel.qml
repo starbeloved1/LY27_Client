@@ -9,20 +9,21 @@ Item {
     readonly property color accent: result.accent || Theme.secondary
     HudPanel { anchors.fill: parent; accent: root.accent; panelOpacity: .88; showDiagonalTexture: false }
     UiText {
-        x: 12; y: 4; width: parent.width - 24; height: root.compact ? 12 : 16
+        x: 12; y: 2; width: parent.width - 24; height: root.compact ? 9 : 15
         text: root.result.heading || ""
-        color: Theme.secondary; font.pixelSize: root.compact ? 9 : 11
+        color: Theme.secondary; font.pixelSize: root.compact ? 8 : 10
     }
     Item {
-        x: 12; y: root.compact ? 16 : 22
-        width: parent.width - 24; height: parent.height - y - 4
+        anchors.fill: parent
         Column {
+            objectName: "noticeBody"
             anchors.centerIn: parent
-            width: parent.width
-            spacing: root.compact ? 2 : 5
+            anchors.alignWhenCentered: false
+            width: parent.width - 24
+            spacing: root.compact ? 2 : 3
             UiText {
                 objectName: "resultMessage"
-                width: parent.width; height: root.compact ? 17 : 28
+                width: parent.width; height: root.compact ? 14 : 26
                 text: root.result.message || ""
                 color: root.accent; font.pixelSize: root.compact ? 14 : 20; font.bold: true
                 horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
@@ -31,7 +32,7 @@ Item {
             UiText {
                 objectName: "resultDetail"
                 visible: text.length > 0
-                width: parent.width; height: root.compact ? 11 : 20
+                width: parent.width; height: root.compact ? 11 : 18
                 text: root.result.detail || ""
                 color: Theme.text; font.pixelSize: root.compact ? 10 : 13
                 horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter

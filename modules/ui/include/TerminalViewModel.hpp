@@ -18,6 +18,7 @@ class TerminalViewModel final : public QObject {
     Q_PROPERTY(QVariantList mechanisms READ mechanisms NOTIFY mechanismsChanged)
     Q_PROPERTY(QVariantMap battleNotice READ battleNotice NOTIFY battleNoticeChanged)
     Q_PROPERTY(QVariantMap injury READ injury NOTIFY injuryChanged)
+    Q_PROPERTY(QVariantMap playerHud READ playerHud NOTIFY playerHudChanged)
     Q_PROPERTY(QVariantMap territories READ territories NOTIFY territoriesChanged)
     Q_PROPERTY(QVariantMap facilityBuffs READ facilityBuffs NOTIFY facilityBuffsChanged)
     Q_PROPERTY(QVariantList selfBuffs READ selfBuffs NOTIFY selfBuffsChanged)
@@ -34,6 +35,7 @@ public:
     QVariantList mechanisms() const { return m_mechanisms; }
     QVariantMap battleNotice() const { return m_battleNotice; }
     QVariantMap injury() const { return m_injury; }
+    QVariantMap playerHud() const { return m_playerHud; }
     QVariantMap territories() const { return m_territories; }
     QVariantMap facilityBuffs() const { return m_facilityBuffs; }
     QVariantList selfBuffs() const { return m_selfBuffs; }
@@ -43,6 +45,7 @@ public:
     QAbstractItemModel *events() { return &m_events; }
     bool blueView() const { return m_blueView; }
     void setBlueView(bool value);
+    void suppressRestoredResult();
     void refresh();
 
 signals:
@@ -51,6 +54,7 @@ signals:
     void battleNoticeChanged();
     void mechanismsChanged();
     void injuryChanged();
+    void playerHudChanged();
     void territoriesChanged();
     void facilityBuffsChanged();
     void selfBuffsChanged();
@@ -65,11 +69,15 @@ private:
     QVariantMap m_phase;
     QVariantList m_mechanisms;
     QString m_phaseEpoch;
+    QString m_outpostEpoch;
+    QString m_outpostOwners[2];
     int m_lastStage = -1;
     bool m_animateVictory = false;
+    bool m_suppressRestoredResult = false;
     qint64 m_startUntilNs = 0;
     QVariantMap m_battleNotice;
     QVariantMap m_injury;
+    QVariantMap m_playerHud;
     QVariantMap m_territories;
     QVariantMap m_facilityBuffs;
     QVariantList m_selfBuffs;
@@ -83,7 +91,9 @@ private:
     void clearBattleNotice();
     void updatePresentation(const MatchState &game, const GlobalState &global, bool paused);
     void updateInjury();
+    void updatePlayerHud();
     void updateTerritories(const GlobalState &global);
+    QString outpostOwner(const OutpostState &outpost, int index);
     RobotMapModel m_robots;
     EventListModel m_events;
     TacticalMapController m_tactics;

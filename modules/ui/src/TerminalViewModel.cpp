@@ -72,6 +72,12 @@ TerminalViewModel::TerminalViewModel(const StateStore &store, TerminalIdentity i
     observeBattleEvent({});
 }
 
+void TerminalViewModel::suppressRestoredResult()
+{
+    m_suppressRestoredResult = true;
+    refresh();
+}
+
 void TerminalViewModel::setBlueView(bool value)
 {
     if (m_blueView == value) return;
@@ -162,6 +168,7 @@ void TerminalViewModel::observeBattleEvent(const QString &topic)
 void TerminalViewModel::refresh()
 {
     updateInjury();
+    updatePlayerHud();
     m_notices.refresh();
     const auto selfBuffs = m_identity.role != Role::Commander && m_identity.robotId
         ? mapBuffs(m_store.buffs(*m_identity.robotId)) : QVariantList{};
@@ -171,6 +178,13 @@ void TerminalViewModel::refresh()
     if (m_facilityBuffs != facilityBuffs) { m_facilityBuffs = facilityBuffs; emit facilityBuffsChanged(); }
     const auto game = m_store.matchState();
     const auto global = m_store.globalState();
+    const auto &outpostSource = global.rOutpost.controlState.source;
+    const QString outpostEpoch = QStringLiteral("%1/%2/%3").arg(outpostSource.sessionId)
+        .arg(outpostSource.connection).arg(outpostSource.roundRevision);
+    if (m_outpostEpoch != outpostEpoch) {
+        m_outpostEpoch = outpostEpoch;
+        m_outpostOwners[0].clear(); m_outpostOwners[1].clear();
+    }
     const bool redAlly = m_identity.team == Team::Red;
     const auto &redBase = redAlly ? global.allyBase : global.enemyBase;
     const auto &blueBase = redAlly ? global.enemyBase : global.allyBase;
@@ -222,7 +236,8 @@ void TerminalViewModel::refresh()
         {"controlNetRate", controlNetRate},
         {"allyTechLevel", number(global.logistics.techLevel)},
         {"allyEncryptionLevel", number(global.logistics.encryptionLevel)},
-        {"rOutpostHp", number(global.rOutpost.currentHealth)}, {"bOutpostHp", number(global.bOutpost.currentHealth)}
+        {"rOutpostHp", number(global.rOutpost.currentHealth)}, {"bOutpostHp", number(global.bOutpost.currentHealth)},
+        {"rOutpostOwner", outpostOwner(global.rOutpost, 0)}, {"bOutpostOwner", outpostOwner(global.bOutpost, 1)}
     };
     const auto previousPhase = m_phase;
     const auto previousMechanisms = m_mechanisms;
@@ -233,6 +248,20 @@ void TerminalViewModel::refresh()
     if (previousMechanisms != m_mechanisms) emit mechanismsChanged();
     if (different) emit changed();
     m_robots.refresh(m_blueView);
+}
+
+QString TerminalViewModel::outpostOwner(const OutpostState &outpost, int index)
+{
+    if (!outpost.controlState.isFresh() || !outpost.currentHealth.isFresh()) return "unknown";
+    const auto state = *outpost.controlState.value;
+    if (state < 1 || state > 4) return "unknown";
+    // 规则只允许通过击毁改变前哨阵地的完全控制方；临时占领不能给建筑换色。
+    // 1 Hz 可能略过零血量，因此以完全控制方及已存活的同步快照确认当前拥有方，绝不补写 500 HP。
+    if ((state == 1 || state == 4) && *outpost.currentHealth.value > 0) {
+        const bool red = state == 1 ? m_identity.team == Team::Red : m_identity.team == Team::Blue;
+        m_outpostOwners[index] = red ? "red" : "blue";
+    }
+    return m_outpostOwners[index].isEmpty() ? QStringLiteral("unknown") : m_outpostOwners[index];
 }
 
 void TerminalViewModel::updateTerritories(const GlobalState &global)
@@ -314,7 +343,40 @@ void TerminalViewModel::updateInjury()
             killer = QStringLiteral("%1 %2 号").arg(id >= 100 ? QStringLiteral("蓝方") : QStringLiteral("红方")).arg(id % 100);
         else killer = QStringLiteral("编号 %1").arg(id);
     }
-    const QVariantMap values{{"rows", rows}, {"totalText", valueText(injury.totalDamage)}, {"killerText", killer},
+    const RobotModules modules = robot ? robot->modules : RobotModules{};
+    struct ModuleRow {
+        const char *key;
+        const char *label;
+        const StateField<RobotModuleState> *field;
+    };
+    const ModuleRow moduleDefinitions[] = {
+        {"armor", "装甲", &modules.armor},
+        {"videoTransmission", "图传", &modules.videoTransmission},
+        {"smallShooter", "17mm 测速", &modules.smallShooter},
+        {"bigShooter", "42mm 测速", &modules.bigShooter},
+        {"rfid", "RFID", &modules.rfid},
+        {"uwb", "UWB 定位", &modules.uwb},
+        {"lightStrip", "灯条", &modules.lightStrip},
+        {"powerManager", "电源管理", &modules.powerManager},
+        {"capacitor", "电容", &modules.capacitor},
+        {"mainController", "主控", &modules.mainController}
+    };
+    QVariantList moduleRows;
+    for (const auto &module : moduleDefinitions) {
+        int state = -1;
+        QString text = QStringLiteral("未知");
+        if (module.field->isFresh()) {
+            // 未识别枚举与缺失/过期同样显示未知，不把安装权限当成在线状态。
+            switch (*module.field->value) {
+            case RobotModuleState::Offline: state = 0; text = QStringLiteral("离线"); break;
+            case RobotModuleState::Online: state = 1; text = QStringLiteral("在线"); break;
+            case RobotModuleState::InstallationFault: state = 2; text = QStringLiteral("安装异常"); break;
+            }
+        }
+        moduleRows.append(QVariantMap{{"key", module.key}, {"label", QString::fromUtf8(module.label)},
+                                     {"state", state}, {"stateText", text}});
+    }
+    const QVariantMap values{{"rows", rows}, {"modules", moduleRows}, {"totalText", valueText(injury.totalDamage)}, {"killerText", killer},
         {"robotText", robot ? QStringLiteral("%1 %2 号").arg(robot->team == Team::Blue ? QStringLiteral("蓝方") : QStringLiteral("红方")).arg(robot->robotId % 100)
                             : QStringLiteral("当前身份未绑定机器人")}};
     if (m_injury != values) { m_injury = values; emit injuryChanged(); }
@@ -335,6 +397,10 @@ void TerminalViewModel::updatePresentation(const MatchState &game, const GlobalS
         m_lastStage = -1; m_startUntilNs = 0; return;
     }
     const int stage = static_cast<int>(*game.stage.value);
+    // 身份切换后的首包结算是状态恢复，不弹静态战报或胜利动画。
+    // 只有该身份真正收到比赛进行中的新鲜状态，才允许后续正常结算展示。
+    if (stage == 4) m_suppressRestoredResult = false;
+    if (stage == 5 && m_suppressRestoredResult) return;
     const qint64 nowNs = s.receivedMonotonicNs + s.ageMs.value_or(0) * 1000000;
     if (stage == 4 && m_lastStage == 3) m_startUntilNs = nowNs + 1200000000LL;
     // 启动或重连后的结算快照不重播；胜者延迟上报时保留本次真实阶段切换的播放资格。
@@ -371,8 +437,8 @@ void TerminalViewModel::updatePresentation(const MatchState &game, const GlobalS
         m_phase.insert("kind", "start");
     }
     if (stage != 4 || paused || !global.mechanisms.isFresh()) return;
-    const QStringList regions{QStringLiteral("R 前哨阵地"), QStringLiteral("B 前哨阵地"),
-                              QStringLiteral("R 基地阵地"), QStringLiteral("B 基地阵地")};
+    const QStringList regions{QStringLiteral("红方前哨阵地"), QStringLiteral("蓝方前哨阵地"),
+                              QStringLiteral("红方基地阵地"), QStringLiteral("蓝方基地阵地")};
     QSet<quint32> seen;
     for (const auto &mechanism : *global.mechanisms.value) {
         const auto id = mechanism.id;
@@ -381,11 +447,14 @@ void TerminalViewModel::updatePresentation(const MatchState &game, const GlobalS
         seen.insert(id);
         const bool enemy = id == 1 || (id >= 3 && raw < 0);
         const QString target = id == 1 ? QStringLiteral("己方堡垒") : id == 2 ? QStringLiteral("敌方堡垒") : regions[int(id) - 3];
-        const QString actor = enemy ? QStringLiteral("敌方") : QStringLiteral("己方");
+        const QString actor = enemy ? QStringLiteral("敌方") : id >= 3 ? QStringLiteral("我方") : QStringLiteral("己方");
         const qint64 seconds = raw < 0 ? -raw : raw;
+        const QString message = id >= 3 ? QStringLiteral("%1正在占领%2！").arg(actor, target)
+            : QStringLiteral("%1还有 %2 秒").arg(actor).arg(seconds);
+        const QString detail = id >= 3 ? QStringLiteral("倒计时%1秒").arg(seconds) : QStringLiteral("激活") + target;
         m_mechanisms.append(QVariantMap{{"id", id}, {"seconds", seconds}, {"target", target},
             {"actor", actor}, {"enemy", enemy}, {"accent", enemy ? ui::TeamRed : ui::Positive},
-            {"text", QStringLiteral("%1还有%2秒激活%3").arg(actor).arg(seconds).arg(target)}});
+            {"message", message}, {"detail", detail}, {"text", message + "\n" + detail}});
     }
     std::stable_sort(m_mechanisms.begin(), m_mechanisms.end(), [](const QVariant &a, const QVariant &b) {
         return a.toMap().value("seconds").toLongLong() < b.toMap().value("seconds").toLongLong();

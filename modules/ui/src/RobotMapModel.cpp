@@ -42,6 +42,15 @@ QPointF RobotMapModel::projectPosition(double x, double y, bool blueView)
     return {u, v};
 }
 
+qreal RobotMapModel::footprintPixels(qreal mapWidth, qreal mapHeight) const
+{
+    // 600×600 mm 占地沿用位置投影的标定；取较小尺度保持圆形车标等比。
+    const auto origin = projectPosition(0, 0);
+    const auto corner = projectPosition(.6, .6);
+    return std::max(0.0, std::min((corner.x() - origin.x()) * mapWidth,
+                                (origin.y() - corner.y()) * mapHeight));
+}
+
 void RobotMapModel::refresh(bool blueView)
 {
     const int ids[] = {1, 3, 4, 7, 101, 103, 104, 107};

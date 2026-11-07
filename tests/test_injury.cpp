@@ -51,6 +51,15 @@ ly27::wire::RobotInjuryStat injury()
     p.set_offline_damage(30); p.set_penalty_damage(10); p.set_server_kill_damage(400); p.set_killer_id(107);
     return p;
 }
+ly27::wire::RobotModuleStatus modules()
+{
+    ly27::wire::RobotModuleStatus p;
+    p.set_power_manager(1); p.set_rfid(0); p.set_light_strip(2);
+    p.set_small_shooter(1); p.set_big_shooter(0); p.set_uwb(1); p.set_armor(2);
+    p.set_video_transmission(1); p.set_capacitor(0); p.set_main_controller(2);
+    p.set_modular_42mm(1);
+    return p;
+}
 }
 
 class InjuryTest : public QObject {
@@ -75,6 +84,11 @@ private slots:
         QEvent deactivated(QEvent::WindowDeactivate);
         QCoreApplication::sendEvent(&s.window, &deactivated); QVERIFY(!panel->isVisible());
         QTest::keyRelease(&s.window, Qt::Key_AsciiTilde, Qt::ShiftModifier);
+        // 图传默认占满窗口，按住快捷键时仍允许临时查看右侧面板。
+        QTest::keyClick(&s.window, Qt::Key_P); QVERIFY(s.window.videoVisible());
+        QTest::keyPress(&s.window, Qt::Key_QuoteLeft); QVERIFY(panel->isVisible());
+        QTest::keyRelease(&s.window, Qt::Key_QuoteLeft); QVERIFY(!panel->isVisible());
+        QTest::keyClick(&s.window, Qt::Key_P);
         QTest::keyPress(&s.window, Qt::Key_QuoteLeft); QVERIFY(panel->isVisible());
         s.window.hide(); QVERIFY(!panel->isVisible());
     }
@@ -95,7 +109,7 @@ private slots:
     void allSourcesAndPercentageUseCurrentRobot()
     {
         for (auto team : {ly27::Team::Red, ly27::Team::Blue}) {
-            Scene s(team); QVERIFY(s.send(injury()));
+            Scene s(team); QVERIFY(s.send(injury())); QVERIFY(s.send(modules()));
             QCOMPARE(s.text("injuryTotal"), QString("1000"));
             QVERIFY(s.text("injuryRobot").startsWith(team == ly27::Team::Red ? "红方 3 号" : "蓝方 3 号"));
             QCOMPARE(s.text("injuryKiller"), QString("击杀者：蓝方 7 号"));
@@ -108,15 +122,79 @@ private slots:
             s.model.setBlueView(!s.model.blueView());
             QCOMPARE(s.text("injuryTotal"), QString("1000"));
             QTest::keyPress(&s.window, Qt::Key_QuoteLeft);
-            for (auto size : {QSize(1280, 800), QSize(640, 480)}) {
+            for (auto size : {QSize(1280, 800), QSize(1920, 1080), QSize(640, 480), QSize(640, 900)}) {
                 s.window.resize(size); QTest::qWait(100);
                 auto *panel = s.get("injuryPanel");
                 QVERIFY(QRectF(QPointF(), QSizeF(size)).contains(panel->mapRectToScene(QRectF(QPointF(), panel->size()))));
+                const auto bounds = panel->mapRectToScene(QRectF(QPointF(), panel->size()));
+                QVERIFY(qAbs(bounds.right() - (size.width() - 12)) < .01);
+                auto *frame = s.get("injuryPanelFrame"); QVERIFY(frame);
+                QCOMPARE(frame->mapRectToScene(QRectF(QPointF(), frame->size())), bounds);
+                const auto moduleRows = s.model.injury()["modules"].toList();
+                QCOMPARE(moduleRows.size(), 10);
+                for (const auto &entry : moduleRows) {
+                    const QString key = entry.toMap()["key"].toString();
+                    auto *chip = s.get("injuryModule_" + key); QVERIFY(chip);
+                    QVERIFY(bounds.contains(chip->mapRectToScene(QRectF(QPointF(), chip->size()))));
+                    auto *label = s.get("injuryModuleLabel_" + key);
+                    auto *status = s.get("injuryModuleStatus_" + key);
+                    QVERIFY(label && status);
+                    const auto labelBounds = label->mapRectToScene(QRectF(QPointF(), label->size()));
+                    const auto statusBounds = status->mapRectToScene(QRectF(QPointF(), status->size()));
+                    QVERIFY(!labelBounds.intersects(statusBounds));
+                    QVERIFY(label->property("contentWidth").toReal() <= label->width());
+                    QVERIFY(status->property("contentWidth").toReal() <= status->width());
+                }
                 QDir().mkpath("test-artifacts");
                 QVERIFY(s.window.grabWindow().save(QString("test-artifacts/injury-%1-%2.png").arg(int(team)).arg(size.width())));
             }
             QTest::keyRelease(&s.window, Qt::Key_QuoteLeft);
         }
+    }
+    void moduleStatesAndLifecycle()
+    {
+        const QStringList keys{"armor", "videoTransmission", "smallShooter", "bigShooter", "rfid", "uwb",
+                               "lightStrip", "powerManager", "capacitor", "mainController"};
+        const QList<int> expected{2, 1, 1, 0, 0, 1, 2, 1, 0, 2};
+        for (auto team : {ly27::Team::Red, ly27::Team::Blue}) {
+            Scene s(team);
+            auto assertUnknown = [&] {
+                for (const auto &key : keys) {
+                    if (s.text("injuryModuleStatus_" + key) != "未知" ||
+                        s.get("injuryModule_" + key)->property("moduleState").toInt() != -1) return false;
+                }
+                return true;
+            };
+            QVERIFY(assertUnknown()); QVERIFY(s.send(injury())); QVERIFY(s.send(modules()));
+            for (int n = 0; n < keys.size(); ++n) {
+                QCOMPARE(s.get("injuryModule_" + keys[n])->property("moduleState").toInt(), expected[n]);
+                QCOMPARE(s.text("injuryModuleStatus_" + keys[n]), expected[n] == 0 ? QString("离线")
+                    : expected[n] == 1 ? QString("在线") : QString("安装异常"));
+            }
+            s.model.setBlueView(!s.model.blueView());
+            QCOMPARE(s.text("injuryModuleStatus_armor"), QString("安装异常"));
+            // 模块状态和伤害统计独立更新、独立过期，不用一个 Topic 刷新另一个的有效性。
+            s.now += 2000000000LL; QVERIFY(s.send(modules()));
+            s.now += 1100000000LL; s.model.refresh();
+            QCOMPARE(s.text("injuryTotal"), QString("—"));
+            QCOMPARE(s.text("injuryModuleStatus_videoTransmission"), QString("在线"));
+            s.now += 2100000000LL; s.model.refresh(); QVERIFY(assertUnknown());
+            QVERIFY(s.send(modules(), true)); QVERIFY(assertUnknown());
+            auto partial = modules(); partial.clear_armor(); partial.set_rfid(99);
+            QVERIFY(s.send(partial));
+            QCOMPARE(s.text("injuryModuleStatus_armor"), QString("未知"));
+            QCOMPARE(s.text("injuryModuleStatus_rfid"), QString("未知"));
+            QVERIFY(!s.get("injuryModule_modular42mmPermission"));
+            QVERIFY(!s.get("injuryModule_wifi")); QVERIFY(!s.get("injuryModule_armor0"));
+            s.store.setConnected(false); QVERIFY(assertUnknown());
+            s.store.setConnected(true); QVERIFY(assertUnknown());
+            QVERIFY(s.send(modules()));
+            ly27::wire::GameStatus game; game.set_current_round(1); QVERIFY(s.send(game));
+            game.set_current_round(2); QVERIFY(s.send(game)); QVERIFY(assertUnknown());
+            QVERIFY(s.send(modules())); s.store.reset("next-module-session"); QVERIFY(assertUnknown());
+        }
+        Scene commander(ly27::Team::Red, true); QVERIFY(commander.send(modules()));
+        for (const auto &key : keys) QCOMPARE(commander.text("injuryModuleStatus_" + key), QString("未知"));
     }
     void missingStaleRetainedAndLifecycle()
     {

@@ -21,7 +21,7 @@ Item {
     Timer {
         interval: 40
         repeat: true
-        running: root.visible && root.kind === "result" && root.phase.animateVictory
+        running: root.visible && root.kind === "result" && !!root.phase.animateVictory
             && root.art !== "" && root.frame < root.frameCount - 1
         onTriggered: ++root.frame
     }

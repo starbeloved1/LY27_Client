@@ -53,6 +53,27 @@ add_test(NAME reconfiguration COMMAND test_reconfiguration)
 set_tests_properties(reconfiguration PROPERTIES TIMEOUT 40)
 
 if(LY27_BUILD_DESKTOP)
+    add_executable(test_player_ui test_player_ui.cpp)
+    target_link_libraries(test_player_ui PRIVATE ly27_ui Qt6::Test)
+    add_test(NAME player_ui COMMAND test_player_ui)
+    set_tests_properties(player_ui PROPERTIES TIMEOUT 30
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_executable(test_desktop_video test_desktop_video.cpp)
+    target_link_libraries(test_desktop_video PRIVATE ly27_ui Qt6::Test Qt6::Network)
+    target_compile_definitions(test_desktop_video PRIVATE
+        LY27_VIDEO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/video.hevc")
+    add_test(NAME desktop_video COMMAND test_desktop_video)
+    set_tests_properties(desktop_video PROPERTIES TIMEOUT 20
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_executable(test_desktop_settings test_desktop_settings.cpp)
+    target_link_libraries(test_desktop_settings PRIVATE ly27_ui Qt6::Test Qt6::Network)
+    target_compile_definitions(test_desktop_settings PRIVATE
+        LY27_BROKER_PATH="${MOSQUITTO_EXECUTABLE}"
+        LY27_DESKTOP_PATH="$<TARGET_FILE:ly27_desktop>")
+    add_dependencies(test_desktop_settings ly27_desktop)
+    add_test(NAME desktop_settings COMMAND test_desktop_settings)
+    set_tests_properties(desktop_settings PROPERTIES TIMEOUT 40
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_executable(test_match_notices test_match_notices.cpp)
     target_link_libraries(test_match_notices PRIVATE ly27_ui Qt6::Test)
     add_test(NAME match_notices COMMAND test_match_notices)

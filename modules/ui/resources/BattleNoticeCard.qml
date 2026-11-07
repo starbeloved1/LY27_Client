@@ -18,34 +18,39 @@ Item {
         panelOpacity: .78
     }
     Rectangle {
-        x: 12; y: 0; width: Math.min(parent.width * .48, 150); height: root.compact ? 17 : 23
+        x: 12; y: 0; width: Math.min(parent.width * .48, 150); height: root.compact ? 12 : 20
         color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, .10)
     }
     UiText {
-        x: 16; y: 3; width: parent.width - 32; height: root.compact ? 14 : 18
+        x: 16; y: 2; width: parent.width - 32; height: root.compact ? 9 : 15
         text: root.heading
-        color: Theme.text; font.pixelSize: root.compact ? 9 : 11; font.bold: true
+        color: Theme.text; font.pixelSize: root.compact ? 8 : 10; font.bold: true
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
-    UiText {
-        objectName: root.messageObjectName
-        x: 12; y: root.compact ? 18 : 27; width: parent.width - 24
-        height: root.detail.length ? (root.compact ? 15 : 25) : parent.height - y - 5
-        text: root.message
-        color: Theme.text; font.pixelSize: root.compact ? 12 : 15; font.bold: true
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        wrapMode: Text.Wrap
-        fontSizeMode: Text.Fit; minimumPixelSize: root.compact ? 9 : 11
-    }
-    UiText {
-        visible: root.detail.length > 0
-        x: 12; y: root.compact ? 33 : 54; width: parent.width - 24; height: root.compact ? 14 : 23
-        text: root.detail
-        color: Theme.secondary; font.pixelSize: root.compact ? 10 : 12
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        fontSizeMode: Text.Fit; minimumPixelSize: 9
+    Column {
+        objectName: "noticeBody"
+        anchors.centerIn: parent
+        anchors.alignWhenCentered: false
+        width: parent.width - 24
+        spacing: root.compact ? 2 : 3
+        UiText {
+            objectName: root.messageObjectName
+            width: parent.width
+            height: root.detail.length ? (root.compact ? 14 : 24) : (root.compact ? 18 : 28)
+            text: root.message
+            color: Theme.text; font.pixelSize: root.compact ? 11 : 15; font.bold: true
+            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+            fontSizeMode: Text.Fit; minimumPixelSize: root.compact ? 8 : 10
+        }
+        UiText {
+            objectName: "noticeDetail"
+            visible: root.detail.length > 0
+            width: parent.width; height: root.compact ? 11 : 18
+            text: root.detail
+            color: Theme.secondary; font.pixelSize: root.compact ? 10 : 12
+            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+            fontSizeMode: Text.Fit; minimumPixelSize: 8
+        }
     }
 }

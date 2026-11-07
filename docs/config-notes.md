@@ -2,7 +2,7 @@
 
 ## 使用入口
 
-配置仍由 `modules/config/TerminalConfig.hpp/.cpp` 解析和校验。`TerminalRuntime` 新增统一入口，CLI 和未来桌面设置界面共用：
+配置仍由 `modules/config/TerminalConfig.hpp/.cpp` 解析和校验。`TerminalRuntime` 新增统一入口，CLI 和桌面设置界面共用：
 
 ```cpp
 // 读取当前配置副本，修改后应用；运行对象及其信号连接保持不变。
@@ -31,6 +31,14 @@ runtime.saveCurrentConfig("config/terminal.json", error);
 `config()` 返回只读引用，编辑前应复制。调用入口必须在后端所属 Qt 线程执行。新建配置时需要有效的来源路径、日志目录和完整网络配置；从 `loadConfig()` 或现有 `config()` 复制即可。
 
 `configurationChanged()` 表示本地配置已应用，消费者重新读取身份、状态及图传；`configurationChangeFailed(error, rollbackError)` 报告失败。配置切换内部重启不会额外发出顶层 `started/stopped`，使用配置通知判断切换结果。
+
+## 桌面入口
+
+桌面 `./start.sh` 默认启用 MQTT，初始身份读取配置，不再接受 `cao`、`zhi` 或 `--mqtt`。右上角齿轮可选择重装、3/4 号步兵、指挥手和红蓝方，点击立即应用；另可切换全屏模式，退出恢复原窗口大小或最大化状态，不修改身份或网络会话。指挥手清空机器人绑定，地面角色按阵营设置 1/101、3/103、4/104。
+
+`DesktopSession` 负责桌面选择，将当前显式配置的 MQTT Client ID 传入 `switchIdentity`，不按机器人编号推断通信身份。运行层重连并建立新会话，后端对象地址不变；随后替换 `TerminalViewModel` 及其子模型，让 QML、地图、事件与指挥权限统一读取新身份。旧展示适配在 QML 绑定更新后延迟销毁。新适配抑制身份切换后恢复的结算画面，避免每次选择角色或选边都重复弹出上一局胜利；收到新鲜的比赛进行中状态后，下一次正常结算仍会展示。设置中的选择只应用到当前运行，不自动写配置。切换失败保留旧选择并在面板展示错误。再次选择当前项不重连。
+
+多窗口联调需分别使用不同配置与不同 MQTT Client ID，避免互相挤下线。本地模拟器仍按一个服务视角广播，客户端选边后应将服务器视角同步到相同阵营；更换 Client ID 并不能改变模拟器数据的所属阵营。
 
 ## 切换语义
 

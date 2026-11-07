@@ -20,6 +20,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
     void refresh(bool blueView);
+    Q_INVOKABLE qreal footprintPixels(qreal mapWidth, qreal mapHeight) const;
     static QPointF projectPosition(double x, double y, bool blueView = false);
 
 private:

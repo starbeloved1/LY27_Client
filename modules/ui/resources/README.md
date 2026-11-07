@@ -32,6 +32,12 @@ maps/battlefield.png 为 1662 × 946 的场地高清重建版，来自工作区�
 
 `MatchNotices.qml` 汇总 27 固定节点、能量机关／飞镖结果及机制激活计时，使用 `MechanismNotices.qml` 横向排列 `BattleNoticeCard.qml` 节点／机制框和 `EventResultPanel.qml` 专用结果面板，放不下时换行并允许纵向滚动。`AnimatedNotice.qml` 以稳定消息 ID 管理入场、离场与补位：从上方模糊淡入、上移模糊淡出，离场结束后平移补位；秒数刷新不重播，断线及换局立即清理。模糊使用 Qt Quick Effects，仅在过渡期间启用，软件渲染保留位移和透明度动效。击杀/前哨摧毁图形播报固定覆盖在这些框上层。参考现有面板的暗底和事件配色，没有沿用 26 的旧事件编号或固定规则；数据筛选、时钟及生命周期统一在 C++ `MatchNotices` 中完成，不播放声音。原通用实时事件框已移除；飞镖结果相对己方绿／敌方红，能量完成事件按用户确认的己方范围统一绿色；结果面板只显示实际结果和有效详情。不接无人机被照射。
 
-2026-11-07 的视觉整理通过 `UiTheme.hpp/.cpp` 与 `UiText.qml` 统一配色和字体：原图片资源保持不变，地图仅在显示层叠加暗色蒙层，顶部血条降低高度并增加十分刻度。金色主要用于指挥意图，普通标题与经济改为中性白；地图 Buff 仍完整放在血条上方。布局与实现取舍见 `docs/visual-design.md`。
+2026-11-07 的视觉整理通过 `UiTheme.hpp/.cpp` 与 `UiText.qml` 统一配色和字体：原图片资源保持不变，地图仅在显示层叠加暗色蒙层，顶部血条降低高度，宽度缩为侧翼的 82% 并移除黑色竖向刻度。金色主要用于指挥意图，普通标题与经济改为中性白；地图 Buff 仍完整放在血条上方。布局与实现取舍见 `docs/visual-design.md`。
 
 地图专项整理见 `docs/map-marker-design.md`：底图运行时调色并缓存，PNG 原文件保持不变；36 px 深队色渐变车标使用白色编号、轻投影和带描边的朝向楔形，选中加金圈不改填充。地图设施血条为 72×8，与车辆的 42×12 血条区分；前哨亮度倍率为 0.84、饱和度倍率为 1.55，保留渐隐柔光并添加较轻的贴合轮廓细描边，不添加独立暗衬或光环。
+
+`TerminalSettings.qml` 在右上角绘制小齿轮并显示角色／阵营设置，复用 `TechPanel` 与主题色；点击由 C++ `DesktopSession` 调用运行层身份切换，成功后替换展示适配，不在 QML 修改配置或通信。设置面板支持 Esc、点击外侧或齿轮关闭；全屏开关调用 `MapWindow::setFullScreen`，退出恢复原窗口大小或最大化状态，不影响后端。`Map.qml` 按底图宽高比决定地图栏尺寸，事件栏和分析板吸收横向／纵向余量，保留面板接缝。
+
+## 选手图传页素材与移植
+
+`PlayerAimingHud.qml` 移植 RM26 `CentralAimingHUD.qml` 的准星、热量环和射击信息，`PlayerRobotStatus.qml` 移植 `LeftBottomPanel.qml` 的头像／经验环／血条／缓冲条，`PlayerUnitCard.qml` 移植 `RobotStatusItem.qml` 卡片；来源为复旦大学星云 EGA 的 RM26_Client（MIT）。新增 `images/crosshair/`、`images/my_robot/`、`images/top_robots/` 中所需素材均从 `RM26_Client/resources/models/images/` 复制，仅保留使用的文件。顶部组合遵循原 TopInfoBar 构图，复用本项目已修正的 27 血条组件；不复制旧兵种、固定 Buff、假数据或上行按键。

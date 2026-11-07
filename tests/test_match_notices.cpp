@@ -166,15 +166,17 @@ private slots:
             auto *buffs = item(root,"selfBuffPanel"); auto *map = item(root,"mapArea");
             QVERIFY(timed && timed->isVisible()); QVERIFY(event && event->isVisible()); QVERIFY(buffs && buffs->isVisible());
             const QRectF area(QPointF(), map->size());
-            const auto timedRect = timed->mapRectToItem(map, QRectF(QPointF(),timed->size()));
-            QVERIFY2(area.contains(timedRect), qPrintable(QString("map=%1x%2 timed=(%3,%4,%5,%6) buffWidth=%7")
-                .arg(map->width()).arg(map->height()).arg(timedRect.x()).arg(timedRect.y())
-                .arg(timedRect.width()).arg(timedRect.height()).arg(buffs->width())));
-            QVERIFY(area.contains(event->mapRectToItem(map, QRectF(QPointF(),event->size()))));
             const auto buffRect = buffs->mapRectToItem(map, QRectF(QPointF(),buffs->size()));
             QVERIFY(area.contains(buffRect));
-            QVERIFY(!buffRect.intersects(event->mapRectToItem(map, QRectF(QPointF(),event->size()))));
-            QVERIFY(!buffRect.intersects(timed->mapRectToItem(map, QRectF(QPointF(),timed->size()))));
+            auto *viewport = item(root, "mechanismNotices"); QVERIFY(viewport);
+            // 无留黑的极矮地图按现有规则滚动查看通告，不要求多行同时挤进可见区。
+            for (auto *card : {timed, event}) {
+                const qreal maximum = qMax(0.0, viewport->property("contentHeight").toReal() - viewport->height());
+                viewport->setProperty("contentY", qBound(0.0, card->y(), maximum));
+                QCoreApplication::processEvents();
+                const auto box = card->mapRectToItem(map, QRectF(QPointF(),card->size()));
+                QVERIFY(area.contains(box)); QVERIFY(!buffRect.intersects(box));
+            }
             QDir().mkpath("test-artifacts");
             QVERIFY(window.grabWindow().save(QString("test-artifacts/match-notices-%1.png").arg(size.width())));
         }
@@ -214,7 +216,7 @@ private slots:
         QCOMPARE(item(root, "mechanismNotice3"), left.data());
         QCOMPARE(left->opacity(), 1.0);
         QVERIFY(!left->property("motionRunning").toBool());
-        QCOMPARE(item(left, "mechanismMessage")->property("text").toString(), QString("己方还有 4 秒"));
+        QCOMPARE(item(left, "mechanismMessage")->property("text").toString(), QString("我方正在占领红方前哨阵地！"));
 
         mechanisms.Clear(); mechanisms.add_mechanism_id(4); mechanisms.add_mechanism_time_sec(-6);
         QVERIFY(s.send(mechanisms));
@@ -222,7 +224,7 @@ private slots:
         QTest::qWait(120);
         QVERIFY(left->opacity() > 0 && left->opacity() < 1);
         QVERIFY(left->property("lift").toReal() < 0);
-        QCOMPARE(item(left, "mechanismMessage")->property("text").toString(), QString("己方还有 4 秒"));
+        QCOMPARE(item(left, "mechanismMessage")->property("text").toString(), QString("我方正在占领红方前哨阵地！"));
         QCOMPARE(right->x(), oldRight); // 左框尚未离场，右框保留原位置。
         QDir().mkpath("test-artifacts");
         QVERIFY(window.grabWindow().save("test-artifacts/notices-leaving.png"));
@@ -306,7 +308,12 @@ private slots:
                     QTest::qWait(30);
                     auto *last = item(root, names.last());
                     const auto lastBox = last->mapRectToItem(viewport, QRectF(QPointF(), last->size()));
-                    QVERIFY(QRectF(QPointF(), viewport->size()).contains(lastBox));
+                    // 等比例地图可产生小数宽度，场景变换允许百分之一像素的浮点误差。
+                    QVERIFY2(QRectF(QPointF(), viewport->size()).adjusted(-.01, -.01, .01, .01).contains(lastBox),
+                        qPrintable(QString("window=%1x%2 viewport=%3x%4 last=(%5,%6,%7,%8) scroll=%9")
+                            .arg(size.width()).arg(size.height()).arg(viewport->width()).arg(viewport->height())
+                            .arg(lastBox.x()).arg(lastBox.y()).arg(lastBox.width()).arg(lastBox.height())
+                            .arg(viewport->property("contentY").toReal())));
                     QCOMPARE(announcement->position(), fixedPosition);
                     QVERIFY(window.grabWindow().save(QString("test-artifacts/unified-notices-last-row-%1-%2.png")
                         .arg(commander ? "commander" : "operator").arg(size.width())));

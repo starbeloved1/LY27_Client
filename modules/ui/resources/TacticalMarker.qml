@@ -8,13 +8,17 @@ Item {
     property real lift: 20
     property real mapWidth: 0
     property real mapHeight: 0
+    property real visualScale: 1
+    readonly property real localScale: Math.max(visualScale, 0.000001)
     width: 1; height: 1
+    scale: visualScale
+    transformOrigin: Item.TopLeft
     TechPanel {
         id: badge
         objectName: "tacticalMarkerBadge"
         width: 34; height: 34; cut: 6
-        x: Math.max(2 - root.x, Math.min(-width / 2, root.mapWidth - root.x - width - 2))
-        y: root.y >= root.lift + height / 2 + 2 ? -root.lift - height / 2 : 22
+        x: Math.max(2 - root.x / root.localScale, Math.min(-width / 2, (root.mapWidth - root.x) / root.localScale - width - 2))
+        y: root.y / root.localScale >= root.lift + height / 2 + 2 ? -root.lift - height / 2 : 22
         fill: Theme.overlay
         line: Theme.tactical; lineWidth: 2
         TacticalSymbol { anchors.centerIn: parent; markerType: root.markerType }

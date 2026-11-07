@@ -1,4 +1,8 @@
 add_library(ly27_ui STATIC
+    include/VideoSurface.hpp
+    src/VideoSurface.cpp
+    include/DesktopSession.hpp
+    src/DesktopSession.cpp
     include/UiTheme.hpp
     src/UiTheme.cpp
     include/MatchNotices.hpp
@@ -17,6 +21,7 @@ add_library(ly27_ui STATIC
     include/EventListModel.hpp
     src/MapWindow.cpp
     src/TerminalViewModel.cpp
+    src/TerminalPlayerHud.cpp
     src/RobotMapModel.cpp
     src/EventListModel.cpp
 )
@@ -31,6 +36,13 @@ file(GLOB ly27_battle_images CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/message/*.png"
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/robots/*.png")
 file(GLOB ly27_buff_images CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buffs/*.png")
+file(GLOB_RECURSE ly27_player_images CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/crosshair/*.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/my_robot/*.png"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/top_robots/*.png")
+foreach(existing blue_tab_bar blue_teammate_bg red_tab_bar red_teammate_bg)
+    list(REMOVE_ITEM ly27_player_images "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/top_robots/${existing}.png")
+endforeach()
 qt_add_resources(ly27_ui ly27_ui_resources
     # 图片数据直接写入资源目标文件，避免将动画展开成数百 MB 的 C++ 数组。
     BIG_RESOURCES
@@ -38,6 +50,14 @@ qt_add_resources(ly27_ui ly27_ui_resources
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources"
     FILES
         resources/UiText.qml
+        resources/BattlefieldMap.qml
+        resources/PlayerVideoPage.qml
+        resources/PlayerTopBar.qml
+        resources/PlayerAimingHud.qml
+        resources/PlayerRobotStatus.qml
+        resources/PlayerUnitCard.qml
+        ${ly27_player_images}
+        resources/TerminalSettings.qml
         resources/BattleAnnouncement.qml
         resources/BattleNoticeCard.qml
         resources/EventResultPanel.qml
@@ -58,6 +78,7 @@ qt_add_resources(ly27_ui ly27_ui_resources
         resources/MetricComparison.qml
         resources/HudPanel.qml
         resources/TechPanel.qml
+        resources/SectionTitle.qml
         resources/MechanismNotices.qml
         resources/MatchPhaseOverlay.qml
         ${ly27_phase_images}

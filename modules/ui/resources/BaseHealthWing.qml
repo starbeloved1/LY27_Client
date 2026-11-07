@@ -8,18 +8,19 @@ Item {
     property bool compact: false
     property string teamName: ""
     property int hp: -1
+    property real nameMinimumX: 0
     readonly property string prefix: blue ? "blue" : "red"
     readonly property real logoSize: compact ? 48 : 60
-    readonly property real barX: 0
-    readonly property real barWidth: width
+    readonly property real barX: blue ? 0 : width - barWidth
+    readonly property real barWidth: width * .82
     readonly property real barY: compact ? 37 : 42
     readonly property real barHeight: compact ? 24 : 26
 
     UiText {
         objectName: root.prefix + "TeamName"
-        x: root.barX + (root.blue ? root.logoSize * 0.62 : 0)
+        x: Math.max(root.nameMinimumX, root.barX + (root.blue ? root.logoSize * 0.62 : 0))
         y: 0
-        width: root.barWidth - root.logoSize * 0.62
+        width: Math.max(0, root.barX + root.barWidth - x - (root.blue ? 0 : root.logoSize * 0.62))
         height: root.compact ? 29 : 36
         text: root.teamName
         color: Theme.text

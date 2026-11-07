@@ -329,7 +329,7 @@ private slots:
             QVERIFY2(card, "倒计时变化销毁了阵地提示面板");
             QCOMPARE(s.get("mechanismNotice3"), card.data());
             QCOMPARE(item(card, "mechanismMessage")->property("text").toString(),
-                     QStringLiteral("己方还有 %1 秒").arg(seconds));
+                     QStringLiteral("我方正在占领红方前哨阵地！"));
         }
         // 排序、新增和移除提示只更新现有槽位，不重建控件。
         m.add_mechanism_id(4); m.add_mechanism_time_sec(-2); QVERIFY(s.send(m));
@@ -369,9 +369,9 @@ private slots:
             g.set_is_paused(false); QVERIFY(s.send(g)); QCOMPARE(s.model.mechanisms().size(), 6);
             m.Clear(); QVERIFY(s.send(m)); QVERIFY(s.model.mechanisms().isEmpty());
             m.add_mechanism_id(3); m.add_mechanism_time_sec(-2); QVERIFY(s.send(m));
-            QCOMPARE(s.model.mechanisms().first().toMap().value("text").toString(), QString("敌方还有2秒激活R 前哨阵地"));
+            QCOMPARE(s.model.mechanisms().first().toMap().value("text").toString(), QString("敌方正在占领红方前哨阵地！\n倒计时2秒"));
             m.set_mechanism_time_sec(0, 2); QVERIFY(s.send(m));
-            QCOMPARE(s.model.mechanisms().first().toMap().value("actor").toString(), QString("己方"));
+            QCOMPARE(s.model.mechanisms().first().toMap().value("actor").toString(), QString("我方"));
             m.set_mechanism_time_sec(0, 0); QVERIFY(s.send(m)); QVERIFY(s.model.mechanisms().isEmpty());
             m.set_mechanism_time_sec(0, 2); m.add_mechanism_id(4); QVERIFY(s.send(m));
             QVERIFY(s.model.mechanisms().isEmpty());

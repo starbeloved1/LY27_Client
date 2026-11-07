@@ -161,17 +161,6 @@ Item {
     }
 
 
-    // 满槽参照刻度不随剩余血量裁切，半血对应第五格。
-    Repeater {
-        model: 9
-        Rectangle {
-            required property int index
-            x: (index + 1) * root.width / 10
-            y: root.height * .25; width: 1; height: root.height * .5
-            color: Theme.ink; opacity: .32
-        }
-    }
-
     // 血量数字
     UiText {
         visible: root.showHealthText

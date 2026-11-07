@@ -10,167 +10,38 @@ Rectangle {
     readonly property bool blueView: viewModel ? viewModel.blueView : false
     readonly property var tactics: viewModel ? viewModel.tactics : null
     readonly property real mapAspect: 1662 / 946
+    readonly property bool videoVisible: desktopWindow.videoVisible
+    // 地图栏本身按底图比例定尺寸，横向余量归事件栏，纵向余量归分析板。
+    readonly property real preferredEventWidth: Math.round(Math.min(250, Math.max(170, width * 0.155)))
+    readonly property real minimumAnalysisHeight: width < 760 ? 226 : 164
+    readonly property real fittedMapWidth: Math.max(0, Math.min(width - preferredEventWidth - Theme.gutter,
+        Math.max(0, height - header.height - minimumAnalysisHeight) * mapAspect))
+    readonly property real fittedMapHeight: fittedMapWidth / mapAspect
     MatchHeader {
         id: header
+        visible: !root.videoVisible
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         match: root.viewModel ? root.viewModel.match : ({})
     }
-    Item {
+    BattlefieldMap {
         id: mapArea
+        viewModel: root.viewModel
+        visible: !root.videoVisible
         objectName: "mapArea"
         anchors.top: header.bottom
-        anchors.bottom: analysis.top
-        anchors.left: events.right
-        anchors.leftMargin: Theme.gap
         anchors.right: parent.right
+        width: root.fittedMapWidth
+        height: root.fittedMapHeight
         clip: true
-        Rectangle { anchors.fill: parent; color: Theme.panel }
-        Image {
-            id: battlefield
-            objectName: "battlefieldImage"
-            anchors.fill: parent
-            source: "image://battlefield/map"
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            mipmap: true
-            rotation: root.blueView ? 180 : 0
-        }
-        // 保留验收标识作为图片内框，不再叠灰色蒙层；色调由缓存的图片提供器完成。
-        Rectangle {
-            objectName: "mapContrastVeil"
-            width: battlefield.paintedWidth; height: battlefield.paintedHeight
-            anchors.centerIn: parent
-            color: "transparent"; border.color: Theme.divider
-        }
-        Rectangle {
-            anchors.fill: parent
-            color: "transparent"; border.color: Theme.border
-            z: 2
-        }
-        // 标记跟随实际图片区域，不把窗口留白算进场地。
-        Item {
-            id: markerLayer
-            objectName: "mapMarkerLayer"
-            width: battlefield.paintedWidth
-            height: battlefield.paintedHeight
-            anchors.centerIn: parent
-            MouseArea {
-                objectName: "tacticalMapHitArea"
-                anchors.fill: parent
-                enabled: root.tactics ? root.tactics.commander : false
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: function(mouse) {
-                    if (mouse.button === Qt.RightButton) root.tactics.cancel()
-                    else root.tactics.clickMap(mouse.x / width, mouse.y / height)
-                }
-            }
-            TerritoryOverlayItem {
-                objectName: "territoryOverlay"
-                anchors.fill: parent
-                blueView: root.blueView
-                territories: root.viewModel ? root.viewModel.territories : ({})
-            }
-            Repeater {
-                model: root.viewModel ? root.viewModel.robots : null
-                delegate: RobotMarker {
-                    required property int robotId
-                    required property int robotNumber
-                    required property bool isBlue
-                    required property bool isSelf
-                    required property real mapX
-                    required property real mapY
-                    required property real heading
-                    required property bool positionKnown
-                    required property bool positionFresh
-                    required property string levelText
-                    required property bool hpKnown
-                    required property real hpRatio
-                    required property var activeBuffs
-                    objectName: "mapRobot" + robotId
-                    x: mapX * markerLayer.width
-                    y: mapY * markerLayer.height
-                    visible: positionKnown
-                    opacity: positionFresh ? 1 : 0.38
-                    blue: isBlue
-                    self: isSelf
-                    selected: root.tactics ? root.tactics.selectedReceiver === robotId : false
-                    interactive: root.tactics ? root.tactics.commander && positionFresh : false
-                    onActivated: root.tactics.clickRobot(robotId)
-                    onCancelRequested: root.tactics.cancel()
-                    number: robotNumber
-                    angle: heading
-                    rankText: levelText
-                    healthKnown: hpKnown
-                    ratio: hpRatio
-                    buffs: activeBuffs
-                    mapWidth: markerLayer.width
-                    mapHeight: markerLayer.height
-                    Behavior on x { enabled: positionFresh && !root.flipping; NumberAnimation { duration: 85 } }
-                    Behavior on y { enabled: positionFresh && !root.flipping; NumberAnimation { duration: 85 } }
-                }
-            }
-            Repeater {
-                model: root.tactics ? root.tactics.facilities : []
-                delegate: FacilityMapMarker {
-                    required property var modelData
-                    objectName: "map" + modelData.key
-                    x: (root.blueView ? 1 - modelData.px / 1662 : modelData.px / 1662) * markerLayer.width
-                    y: (root.blueView ? 1 - modelData.py / 946 : modelData.py / 946) * markerLayer.height
-                    outpost: modelData.outpost ?? false
-                    interactive: root.tactics ? root.tactics.commander : false
-                    onActivated: root.tactics.clickFacility(modelData.id)
-                    onCancelRequested: root.tactics.cancel()
-                    blue: modelData.blue
-                    health: root.viewModel ? (root.viewModel.match[modelData.field] ?? -1) : -1
-                    maximum: modelData.maximum
-                    buffs: root.viewModel ? (root.viewModel.facilityBuffs[String(modelData.id)] ?? []) : []
-                    footprintRadius: modelData.radius / 946 * markerLayer.height
-                    mapWidth: markerLayer.width
-                    mapHeight: markerLayer.height
-                }
-            }
-            Repeater {
-                // 接收席位固定，不随目标车的每次位置更新销毁、重建图标。
-                model: root.viewModel ? root.viewModel.robots : null
-                delegate: TacticalMarker {
-                    required property int robotId
-                    readonly property var mark: root.tactics ? (root.tactics.markerStates[String(robotId)] ?? ({})) : ({})
-                    property bool tracking: false
-                    objectName: "tacticalMarker" + robotId
-                    visible: mark.type !== undefined
-                    onVisibleChanged: {
-                        tracking = false
-                        Qt.callLater(function() { tracking = visible })
-                    }
-                    x: (mark.mapX ?? 0) * markerLayer.width
-                    y: (mark.mapY ?? 0) * markerLayer.height
-                    markerType: mark.type ?? 1
-                    receiver: root.tactics && root.tactics.commander ? String(robotId % 100) : ""
-                    lift: (mark.kind === "robot" ? 64 : mark.kind === "facility"
-                        ? Math.max(34, mark.radius / 946 * markerLayer.height) + 43 : 22) + (mark.buffRow ? 16 : 0)
-                    mapWidth: markerLayer.width
-                    mapHeight: markerLayer.height
-                    z: 5
-                    Behavior on x { enabled: tracking && !root.flipping; NumberAnimation { duration: 85 } }
-                    Behavior on y { enabled: tracking && !root.flipping; NumberAnimation { duration: 85 } }
-                }
-            }
-            MapMarkerMenu {
-                controller: root.tactics
-                x: Math.max(2, Math.min((target.mapX ?? 0) * markerLayer.width - width / 2, markerLayer.width - width - 2))
-                y: Math.max(2, Math.min((target.mapY ?? 0) * markerLayer.height - height - 12, markerLayer.height - height - 2))
-                z: 20
-            }
-        }
         TechPanel {
             anchors.bottom: parent.bottom
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottomMargin: 6
             width: Math.min(parent.width - 12, hint.implicitWidth + 24)
             height: 26; cut: 3; z: 21
-            visible: root.tactics ? root.tactics.commander || root.tactics.feedback.length > 0 : false
+            visible: !root.videoVisible && (root.tactics ? root.tactics.commander || root.tactics.feedback.length > 0 : false)
             fill: Theme.overlay
             line: Theme.divider
             UiText {
@@ -232,41 +103,52 @@ Rectangle {
     }
     EventPanel {
         id: events
+        visible: !root.videoVisible
         anchors.top: header.bottom
         anchors.bottom: analysis.top
         anchors.left: parent.left
-        width: Math.round(Math.min(250, Math.max(170, root.width * 0.155)))
+        width: root.width - mapArea.width - Theme.gutter
         eventModel: root.viewModel ? root.viewModel.events : null
-    }
-    property bool flipping: false
-    Connections {
-        target: root.viewModel
-        function onBlueViewChanged() {
-            root.flipping = true
-            Qt.callLater(function() { root.flipping = false })
-        }
     }
     BattleAnalysisPanel {
         id: analysis
-        // 保留三个分区；窄屏为后勤保留第二行，常规窗口压缩面板空白。
-        height: width < 760 ? 198 : 132
+        visible: !root.videoVisible
+        // 不侵占地图；底图受窗口宽度限制时，剩余高度由分析板吸收。
+        height: Math.max(root.minimumAnalysisHeight, root.height - header.height - root.fittedMapHeight)
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         match: root.viewModel ? root.viewModel.match : ({})
     }
-    MatchPhaseOverlay {
+    Item {
         anchors.fill: parent
-        phase: root.viewModel ? root.viewModel.phase : ({})
-        match: root.viewModel ? root.viewModel.match : ({})
-        z: 100
+        // 两个页面共享同一阶段弹层，切换 P 不得重新播放已关闭的胜利界面。
+        z: 180
+        MatchPhaseOverlay {
+            anchors.fill: parent
+            phase: root.viewModel ? root.viewModel.phase : ({})
+            match: root.viewModel ? root.viewModel.match : ({})
+        }
+    }
+    PlayerVideoPage {
+        objectName: "videoPage"
+        anchors.fill: parent
+        visible: root.videoVisible
+        viewModel: root.viewModel
+        session: sessionSettings
+        z: 150
     }
     DamagePanel {
-        anchors.left: parent.left
-        anchors.leftMargin: 12
+        anchors.right: parent.right
+        anchors.rightMargin: 12
         anchors.verticalCenter: parent.verticalCenter
         visible: desktopWindow.injuryPanelVisible
         stats: root.viewModel ? root.viewModel.injury : ({})
         z: 200
+    }
+    TerminalSettings {
+        anchors.fill: parent
+        session: sessionSettings
+        z: 300
     }
 }

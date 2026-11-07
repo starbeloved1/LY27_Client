@@ -163,6 +163,7 @@ private slots:
         ly27::wire::GlobalUnitStatus units;
         units.set_base_health(6789); units.set_enemy_base_health(8321);
         units.set_outpost_r_health(765); units.set_outpost_b_health(0);
+        units.set_outpost_r_status(4); units.set_outpost_b_status(1);
         QVERIFY(send(store, units, now));
         const QStringList names{"RedBase", "BlueBase", "ROutpost", "BOutpost"};
         const QStringList expected{"8321", "6789", "765", "0"};
@@ -192,7 +193,7 @@ private slots:
                             ? qMin(33.0, layer->height() * .20) : 62.0);
                         QTRY_COMPARE(icon->property("status").toInt(), 1);
                         QCOMPARE(icon->property("source").toUrl().fileName(),
-                                 i == 2 ? QString("red_map_outpost.png") : QString("blue_map_outpost.png"));
+                                 i == 2 ? QString("red_map_outpost.png") : QString("unknown_map_outpost.png"));
                         const auto iconBounds = icon->mapRectToItem(layer, QRectF(QPointF(), icon->size()));
                         QVERIFY(QRectF(0, 0, layer->width(), layer->height()).contains(iconBounds));
                     }
@@ -286,7 +287,11 @@ private slots:
             auto *events = item(root, "eventList");
             auto *analysis = item(root, "battleAnalysisPanel");
             auto *map = item(root, "battlefieldImage");
-            QVERIFY(panel && mapArea && events && analysis && map);
+            auto *layer = item(root, "mapMarkerLayer");
+            QVERIFY(panel && mapArea && events && analysis && map && layer);
+            auto *stage = item(root, "matchStage"); QVERIFY(stage);
+            QVERIFY(rect(stage).left() < 24 && rect(stage).top() < 12);
+            QCOMPARE(stage->property("color").value<QColor>(), QColor(Qt::white));
             QVERIFY(rect(panel).right() <= rect(mapArea).left());
             QCOMPARE(rect(panel).top(), header.bottom());
             QCOMPARE(rect(panel).bottom(), rect(analysis).top());
@@ -301,7 +306,10 @@ private slots:
             const double imageWidth = map->property("paintedWidth").toDouble();
             const double imageHeight = map->property("paintedHeight").toDouble();
             QVERIFY(qAbs(imageWidth / imageHeight - 1662.0 / 946.0) < 0.001);
-            QVERIFY(qAbs(imageWidth - mapArea->width()) < 0.5 || qAbs(imageHeight - mapArea->height()) < 0.5);
+            QVERIFY(qAbs(imageWidth - mapArea->width()) < 0.5);
+            QVERIFY(qAbs(imageHeight - mapArea->height()) < 0.5);
+            QVERIFY(qAbs(mapArea->width() / mapArea->height() - 1662.0 / 946.0) < 0.001);
+            QVERIFY(rect(mapArea).left() > rect(panel).right());
             QCOMPARE(events->property("count").toInt(), 8);
             QTRY_VERIFY2(events->property("atYEnd").toBool(), qPrintable(QString("%1x%2").arg(size.width()).arg(size.height())));
             for (int a = 0; a < names.size(); ++a) {
@@ -363,6 +371,14 @@ private slots:
                 auto *level = item(marker, "robotLevelValue");
                 auto *unknown = item(marker, "robotHealthUnknown");
                 QVERIFY(track && fill && rank && level && unknown);
+                auto *body = item(marker, "robotBadgeOutline"); QVERIFY(body);
+                const double footprint = std::min(41 * .9, 1.2 * .6 * std::min(layer->width() * 1614 / 1662 / 28,
+                                                                            layer->height() * 897 / 946 / 15));
+                const auto bodyRect = body->mapRectToItem(layer, QRectF(QPointF(), body->size()));
+                QVERIFY(qAbs(bodyRect.width() - footprint) < .001);
+                QVERIFY(qAbs(bodyRect.height() - footprint) < .001);
+                // 血条、等级和朝向共享车身缩放，不因窗口尺寸改变相互比例。
+                QVERIFY(qAbs(rect(track).width() / bodyRect.width() - 42.0 / 41) < .001);
                 QCOMPARE(rect(rank).right(), rect(track).left());
                 QCOMPARE(rank->height(), track->height());
                 QVERIFY(rect(rank).contains(rect(level)));
@@ -375,12 +391,7 @@ private slots:
             QVERIFY(window.grabWindow().copy(0, 0, size.width(), headerHeight)
                         .save(QString("test-artifacts/header-%1.png").arg(size.width())));
         }
-        auto *viewButton = item(root, "mapViewButton");
-        QVERIFY(viewButton);
-        const bool previousView = model.blueView();
-        QTest::mouseClick(&window, Qt::LeftButton, Qt::NoModifier,
-                         viewButton->mapToScene(QPointF(viewButton->width() / 2, viewButton->height() / 2)).toPoint());
-        QTRY_COMPARE(model.blueView(), !previousView);
+        QVERIFY(!item(root, "mapViewButton"));
         // 顶部只保留基地数字；前哨血量继续由地图显示。
         units.set_base_health(10000); units.set_enemy_base_health(0);
         units.set_outpost_r_health(1000); units.clear_outpost_b_health();

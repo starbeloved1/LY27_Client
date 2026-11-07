@@ -34,6 +34,8 @@ class UiTheme final : public QObject {
     Q_PROPERTY(QColor inset MEMBER inset CONSTANT)
     Q_PROPERTY(QColor border MEMBER border CONSTANT)
     Q_PROPERTY(QColor divider MEMBER divider CONSTANT)
+    Q_PROPERTY(QColor hairline MEMBER hairline CONSTANT)
+    Q_PROPERTY(QColor sheen MEMBER sheen CONSTANT)
     Q_PROPERTY(QColor text MEMBER text CONSTANT)
     Q_PROPERTY(QColor secondary MEMBER secondary CONSTANT)
     Q_PROPERTY(QColor muted MEMBER muted CONSTANT)
@@ -59,6 +61,7 @@ class UiTheme final : public QObject {
     Q_PROPERTY(int numberLarge MEMBER numberLarge CONSTANT)
     Q_PROPERTY(int padding MEMBER padding CONSTANT)
     Q_PROPERTY(int gap MEMBER gap CONSTANT)
+    Q_PROPERTY(int gutter MEMBER gutter CONSTANT)
     Q_PROPERTY(int quickMotion MEMBER quickMotion CONSTANT)
     Q_PROPERTY(int numericMotion MEMBER numericMotion CONSTANT)
     Q_PROPERTY(int healthMotion MEMBER healthMotion CONSTANT)
@@ -68,6 +71,8 @@ public:
     static QString preferredNumberFont();
     const QColor background{"#0B0F14"}, panel{"#121820"}, raised{"#19212A"}, inset{"#0D131A"};
     const QColor border{"#34414C"}, divider{"#26323D"};
+    // 面板体系的线用半透明白：放在任何底色上都自然协调。hairline 为板内分隔，sheen 为卡片顶边高光。
+    const QColor hairline{"#12FFFFFF"}, sheen{"#1CFFFFFF"};
     const QColor text{ui::Text}, secondary{ui::Secondary}, muted{"#6F8292"}, unknown{ui::Unknown};
     const QColor teamRed{ui::TeamRed}, teamBlue{ui::TeamBlue}, selfGreen{"#7BE4B0"};
     const QColor teamRedFill{ui::TeamRedFill}, teamBlueFill{ui::TeamBlueFill}, selfFill{ui::SelfFill}, headingInk{ui::HeadingInk};
@@ -75,7 +80,8 @@ public:
     const QColor overlay{"#F010171F"}, ink{"#091017"};
     const QString textFont, numberFont;
     const int caption = 11, body = 13, heading = 17, number = 28, numberLarge = 36;
-    const int padding = 12, gap = 8, quickMotion = 80, numericMotion = ui::NumericMotion, healthMotion = 160;
+    // gutter：机壳上各块面板之间统一的缝，分区靠缝而不靠描边。
+    const int padding = 12, gap = 8, gutter = 6, quickMotion = 80, numericMotion = ui::NumericMotion, healthMotion = 160;
 };
 
 }

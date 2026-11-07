@@ -1,8 +1,10 @@
 #include "MapWindow.hpp"
 #include "UiTheme.hpp"
 #include "TerminalViewModel.hpp"
+#include "DesktopSession.hpp"
 #include "BattleAnnouncementItem.hpp"
 #include "TerritoryOverlayItem.hpp"
+#include "VideoSurface.hpp"
 
 #include <QResource>
 #include <QPainter>
@@ -94,8 +96,8 @@ public:
     OutpostImageProvider() : QQuickImageProvider(QQuickImageProvider::Image) {}
     QImage requestImage(const QString &id, QSize *size, const QSize &) override
     {
-        if (id != "red_map_outpost.png" && id != "blue_map_outpost.png") return {};
-        QImage image(QStringLiteral(":/ly27/ui/images/minimap/") + id);
+        if (id != "red_map_outpost.png" && id != "blue_map_outpost.png" && id != "unknown_map_outpost.png") return {};
+        QImage image(QStringLiteral(":/ly27/ui/images/minimap/") + (id == "unknown_map_outpost.png" ? "red_map_outpost.png" : id));
         image = image.convertToFormat(QImage::Format_ARGB32);
         QImage glow(image.size(), QImage::Format_ARGB32_Premultiplied);
         glow.fill(Qt::transparent);
@@ -133,6 +135,14 @@ public:
         painter.drawImage(0, 0, outlined);
         painter.drawImage(0, 0, image);
         painter.end();
+        if (id == "unknown_map_outpost.png") {
+            glow = glow.convertToFormat(QImage::Format_ARGB32);
+            for (int y = 0; y < glow.height(); ++y) for (int x = 0; x < glow.width(); ++x) {
+                const QRgb pixel = glow.pixel(x, y);
+                const int gray = qGray(pixel);
+                glow.setPixel(x, y, qRgba(gray, gray, gray, qAlpha(pixel)));
+            }
+        }
         if (size) *size = image.size();
         return glow;
     }
@@ -152,7 +162,7 @@ bool injuryHotkey(const QKeyEvent *event)
 }
 }
 
-MapWindow::MapWindow(TerminalViewModel *model, QWindow *parent)
+MapWindow::MapWindow(TerminalViewModel *model, QWindow *parent, DesktopSession *session)
     : QQuickView(parent), m_tactics(model ? model->tactics() : nullptr)
 {
     initializeUiResources();
@@ -163,6 +173,8 @@ MapWindow::MapWindow(TerminalViewModel *model, QWindow *parent)
     Q_UNUSED(announcementType);
     static const int territoryType = qmlRegisterType<TerritoryOverlayItem>("LY27.Ui", 1, 0, "TerritoryOverlayItem");
     Q_UNUSED(territoryType);
+    static const int videoType = qmlRegisterType<VideoSurface>("LY27.Ui", 1, 0, "VideoSurface");
+    Q_UNUSED(videoType);
     static const int tacticsType = qmlRegisterUncreatableType<TacticalMapController>("LY27.Ui", 1, 0,
         "TacticalMapController", QStringLiteral("由终端展示适配持有"));
     Q_UNUSED(tacticsType);
@@ -170,12 +182,38 @@ MapWindow::MapWindow(TerminalViewModel *model, QWindow *parent)
     setResizeMode(QQuickView::SizeRootObjectToView);
     setMinimumSize(QSize(640, 480));
     resize(1280, 800);
+    connect(this, &QWindow::visibilityChanged, this, [this] { emit fullScreenChanged(); });
     rootContext()->setContextProperty(QStringLiteral("terminal"), model);
     rootContext()->setContextProperty(QStringLiteral("desktopWindow"), this);
+    rootContext()->setContextProperty(QStringLiteral("sessionSettings"), static_cast<QObject *>(session));
+    if (session) {
+        setTitle(session->windowTitle());
+        connect(session, &DesktopSession::viewModelChanged, this, [this, session] {
+            setInjuryPanelVisible(false);
+            m_tactics = session->viewModel()->tactics();
+            rootContext()->setContextProperty(QStringLiteral("terminal"), session->viewModel());
+            setTitle(session->windowTitle());
+        });
+    }
     engine()->addImageProvider(QStringLiteral("battlefield"), new BattlefieldImageProvider);
     engine()->addImageProvider(QStringLiteral("outpost"), new OutpostImageProvider);
     engine()->addImageProvider(QStringLiteral("buff"), new BuffImageProvider);
     setSource(QUrl(QStringLiteral("qrc:/ly27/ui/Map.qml")));
+}
+
+void MapWindow::setFullScreen(bool enabled)
+{
+    if (enabled == fullScreen()) return;
+    if (enabled) {
+        m_windowedVisibility = visibility() == QWindow::Maximized ? QWindow::Maximized : QWindow::Windowed;
+        m_windowedGeometry = geometry();
+        showFullScreen();
+    } else if (m_windowedVisibility == QWindow::Maximized) {
+        showMaximized();
+    } else {
+        showNormal();
+        if (m_windowedGeometry.isValid()) setGeometry(m_windowedGeometry);
+    }
 }
 
 void MapWindow::setInjuryPanelVisible(bool visible)
@@ -185,15 +223,38 @@ void MapWindow::setInjuryPanelVisible(bool visible)
     emit injuryPanelVisibleChanged();
 }
 
+void MapWindow::setSettingsVisible(bool visible)
+{
+    if (m_settingsVisible == visible) return;
+    m_settingsVisible = visible;
+    if (visible) setInjuryPanelVisible(false);
+    emit settingsVisibleChanged();
+}
+
 void MapWindow::keyPressEvent(QKeyEvent *event)
 {
+    auto *focus = activeFocusItem();
+    const bool editing = focus && (focus->inherits("QQuickTextInput") || focus->inherits("QQuickTextEdit"));
+    const bool plainKey = !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
+    if (!editing && plainKey && event->key() == Qt::Key_Space) {
+        if (!event->isAutoRepeat()) setSettingsVisible(true);
+        event->accept(); return;
+    }
+    if (!editing && plainKey && event->key() == Qt::Key_P) {
+        if (!event->isAutoRepeat()) {
+            if (m_tactics) m_tactics->cancel();
+            m_videoVisible = !m_videoVisible;
+            emit videoVisibleChanged();
+        }
+        event->accept(); return;
+    }
+    if (m_settingsVisible) {
+        QQuickView::keyPressEvent(event); return;
+    }
     if (event->key() == Qt::Key_Escape && m_tactics && m_tactics->commander()) {
         m_tactics->cancel(); event->accept(); return;
     }
-    auto *focus = activeFocusItem();
-    const bool editing = focus && (focus->inherits("QQuickTextInput") || focus->inherits("QQuickTextEdit"));
-    if (injuryHotkey(event) && !editing &&
-        !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+    if (injuryHotkey(event) && !editing && plainKey) {
         if (!event->isAutoRepeat()) setInjuryPanelVisible(true);
         event->accept();
         return;
@@ -203,6 +264,10 @@ void MapWindow::keyPressEvent(QKeyEvent *event)
 
 void MapWindow::keyReleaseEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Space && m_settingsVisible) {
+        if (!event->isAutoRepeat()) setSettingsVisible(false);
+        event->accept(); return;
+    }
     if (injuryHotkey(event) && m_injuryPanelVisible) {
         if (!event->isAutoRepeat()) setInjuryPanelVisible(false);
         event->accept();
@@ -215,7 +280,10 @@ bool MapWindow::event(QEvent *event)
 {
     // 切到别的窗口后可能收不到松键事件，主动收起，防止面板常驻。
     if (event->type() == QEvent::WindowDeactivate || event->type() == QEvent::FocusOut ||
-        event->type() == QEvent::Hide || event->type() == QEvent::Close) setInjuryPanelVisible(false);
+        event->type() == QEvent::Hide || event->type() == QEvent::Close) {
+        setInjuryPanelVisible(false);
+        setSettingsVisible(false);
+    }
     return QQuickView::event(event);
 }
 

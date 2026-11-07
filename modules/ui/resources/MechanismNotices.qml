@@ -27,6 +27,8 @@ Flickable {
     clip: contentHeight > height
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.VerticalFlick
+    onContentHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
+    onHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
 
     function schedule() { if (ready) Qt.callLater(reconcile) }
     function reset() {
@@ -42,7 +44,7 @@ Flickable {
             result.push({ key: "mechanism" + notice.id, identity: "mechanism" + notice.id,
                 objectName: "mechanismNotice" + notice.id, heading: notice.target,
                 accent: notice.accent,
-                message: notice.actor + "还有 " + notice.seconds + " 秒", detail: "激活" + notice.target,
+                message: notice.message, detail: notice.detail,
                 messageObjectName: "mechanismMessage" })
         })
         timed.forEach(function(notice, index) {
