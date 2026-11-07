@@ -5,6 +5,9 @@
 #include <QDir>
 #include <QGuiApplication>
 #include <QQuickItem>
+#include <QPointer>
+#include <QQmlProperty>
+#include <QSGRendererInterface>
 #include <QtTest>
 
 namespace {
@@ -45,6 +48,15 @@ QQuickItem *item(QQuickItem *root, const QString &name)
     for (auto *child : root->childItems()) if (auto *found = item(child, name)) return found;
     return nullptr;
 }
+bool settleNotices(QQuickItem *root)
+{
+    QCoreApplication::processEvents();
+    return QTest::qWaitFor([root] {
+        auto *strip = item(root, "mechanismNotices");
+        return strip && !strip->property("motionRunning").toBool();
+    }, 2000);
+}
+
 }
 class MatchNoticesTest : public QObject {
     Q_OBJECT
@@ -126,7 +138,7 @@ private slots:
         ly27::MapWindow window(&s.model); window.show(); QCOMPARE(window.status(), QQuickView::Ready);
         auto *root = window.rootObject();
         for (auto size : {QSize(1280,800), QSize(640,480)}) {
-            window.resize(size); QTest::qWait(180);
+            window.resize(size); QTest::qWait(30); QVERIFY(settleNotices(root));
             auto *timed = item(root,"timedMatchNotice"); auto *event = item(root,"liveMatchNotice");
             auto *buffs = item(root,"selfBuffPanel"); auto *map = item(root,"mapArea");
             QVERIFY(timed && timed->isVisible()); QVERIFY(event && event->isVisible()); QVERIFY(buffs && buffs->isVisible());
@@ -145,11 +157,141 @@ private slots:
         }
         QTRY_VERIFY_WITH_TIMEOUT(s.model.notices()->event().isEmpty(), 5500);
         QVERIFY(s.send(s.clock(100))); QVERIFY(s.event(11));
-        QTRY_VERIFY_WITH_TIMEOUT(item(root, "liveMatchNotice")->opacity() > .9, 500);
+        QTRY_VERIFY_WITH_TIMEOUT(item(root, "liveMatchNotice")->opacity() > .9, 1500);
         QVERIFY(!item(root, "selfBuffPanel")->mapRectToItem(root, QRectF(QPointF(), item(root, "selfBuffPanel")->size()))
             .intersects(item(root, "liveMatchNotice")->mapRectToItem(root, QRectF(QPointF(), item(root, "liveMatchNotice")->size()))));
         QVERIFY(item(root, "liveMatchNotice")->isVisible());
         window.setSource(QUrl());
+    }
+    void cardsEnterLeaveAndSlideWithoutRestartingOnTicks()
+    {
+        Scene s(true); QVERIFY(s.send(s.clock(100)));
+        ly27::MapWindow window(&s.model); window.show();
+        QCOMPARE(window.status(), QQuickView::Ready);
+        auto *root = window.rootObject();
+        ly27::wire::GlobalSpecialMechanism mechanisms;
+        mechanisms.add_mechanism_id(3); mechanisms.add_mechanism_time_sec(5);
+        mechanisms.add_mechanism_id(4); mechanisms.add_mechanism_time_sec(-7);
+        QVERIFY(s.send(mechanisms));
+        QPointer<QQuickItem> left = item(root, "mechanismNotice3");
+        QPointer<QQuickItem> right = item(root, "mechanismNotice4");
+        QVERIFY(left && right);
+        QTRY_VERIFY(left->opacity() > 0 && left->opacity() < 1);
+        QVERIFY(left->property("lift").toReal() < 0);
+        QVERIFY(left->property("blurAmount").toReal() > 0);
+        auto *artwork = item(left, "animatedNoticeArtwork"); QVERIFY(artwork);
+        QCOMPARE(QQmlProperty::read(artwork, "layer.enabled").toBool(),
+                 window.rendererInterface()->graphicsApi() != QSGRendererInterface::Software);
+        QVERIFY(settleNotices(root));
+        QCOMPARE(left->opacity(), 1.0);
+        QCOMPARE(left->property("lift").toReal(), 0.0);
+        const qreal oldRight = right->x(); QVERIFY(oldRight > 0);
+        mechanisms.set_mechanism_time_sec(0, 4); QVERIFY(s.send(mechanisms));
+        QTest::qWait(40);
+        QCOMPARE(item(root, "mechanismNotice3"), left.data());
+        QCOMPARE(left->opacity(), 1.0);
+        QVERIFY(!left->property("motionRunning").toBool());
+        QCOMPARE(item(left, "mechanismMessage")->property("text").toString(), QString("己方还有 4 秒"));
+
+        mechanisms.Clear(); mechanisms.add_mechanism_id(4); mechanisms.add_mechanism_time_sec(-6);
+        QVERIFY(s.send(mechanisms));
+        QTRY_VERIFY(left->property("leaving").toBool());
+        QTest::qWait(120);
+        QVERIFY(left->opacity() > 0 && left->opacity() < 1);
+        QVERIFY(left->property("lift").toReal() < 0);
+        QCOMPARE(item(left, "mechanismMessage")->property("text").toString(), QString("己方还有 4 秒"));
+        QCOMPARE(right->x(), oldRight); // 左框尚未离场，右框保留原位置。
+        QDir().mkpath("test-artifacts");
+        QVERIFY(window.grabWindow().save("test-artifacts/notices-leaving.png"));
+        QTRY_VERIFY(!left->property("presented").toBool());
+        QTRY_VERIFY(right->x() > 0 && right->x() < oldRight);
+        QVERIFY(window.grabWindow().save("test-artifacts/notices-sliding.png"));
+        QCOMPARE(item(root, "mechanismNotice4"), right.data());
+        QVERIFY(settleNotices(root)); QCOMPARE(right->x(), 0.0);
+
+        // 离场中重新收到同一机制，从当前透明度/位移接回，不重置成首帧。
+        mechanisms.add_mechanism_id(3); mechanisms.add_mechanism_time_sec(3); QVERIFY(s.send(mechanisms));
+        QTRY_VERIFY(left->isVisible() && left->opacity() > 0);
+        QVERIFY(settleNotices(root));
+        mechanisms.mutable_mechanism_id()->RemoveLast(); mechanisms.mutable_mechanism_time_sec()->RemoveLast();
+        QVERIFY(s.send(mechanisms)); QTRY_VERIFY(left->property("leaving").toBool());
+        QTest::qWait(100);
+        const qreal partialOpacity = left->opacity();
+        mechanisms.add_mechanism_id(3); mechanisms.add_mechanism_time_sec(2); QVERIFY(s.send(mechanisms));
+        QCoreApplication::processEvents();
+        QVERIFY(left->opacity() > 0 && left->opacity() >= partialOpacity - .05);
+        QVERIFY(settleNotices(root)); QCOMPARE(left->opacity(), 1.0);
+        s.store.setConnected(false);
+        QVERIFY(!left->isVisible() && !right->isVisible());
+        QVERIFY(!item(root, "mechanismNotices")->isVisible());
+        QVERIFY(!left->property("motionRunning").toBool());
+        window.setSource(QUrl());
+    }
+    void unifiedCardsFlowAndKillStaysAboveThem()
+    {
+        for (bool commander : {false, true}) {
+            Scene s(commander); QVERIFY(s.send(s.clock(25))); QVERIFY(s.event(10));
+            ly27::MapWindow window(&s.model); window.show();
+            QCOMPARE(window.status(), QQuickView::Ready);
+            auto *root = window.rootObject();
+            auto *announcement = item(root, "battleAnnouncement"); QVERIFY(announcement);
+            for (const auto size : {QSize(1920, 1080), QSize(1280, 800), QSize(640, 480)}) {
+                window.resize(size); QTest::qWait(30); QVERIFY(settleNotices(root));
+                const auto fixedPosition = announcement->position();
+                ly27::wire::GlobalSpecialMechanism mechanisms;
+                mechanisms.add_mechanism_id(3); mechanisms.add_mechanism_time_sec(4);
+                mechanisms.add_mechanism_id(4); mechanisms.add_mechanism_time_sec(-2);
+                QVERIFY(s.send(mechanisms)); QTest::qWait(30); QVERIFY(settleNotices(root));
+                const QStringList names{"mechanismNotice4", "mechanismNotice3", "timedMatchNotice", "liveMatchNotice"};
+                auto *viewport = item(root, "mechanismNotices"); QVERIFY(viewport);
+                QList<QRectF> bounds;
+                QSizeF cardSize;
+                for (const auto &name : names) {
+                    auto *card = item(root, name); QVERIFY(card && card->isVisible());
+                    if (bounds.isEmpty()) cardSize = card->size();
+                    QCOMPARE(card->size(), cardSize);
+                    const auto box = card->mapRectToItem(viewport, QRectF(QPointF(), card->size()));
+                    for (const auto &previous : bounds) QVERIFY(!previous.intersects(box));
+                    if (!bounds.isEmpty()) {
+                        const auto previous = bounds.last();
+                        QVERIFY(box.top() > previous.top() || (qAbs(box.top() - previous.top()) < .5 && box.left() > previous.left()));
+                    }
+                    bounds.append(box);
+                }
+                QCOMPARE(announcement->position(), fixedPosition);
+                QVERIFY(s.event(1, "103,3")); QTest::qWait(120);
+                QVERIFY(announcement->isVisible());
+                QCOMPARE(announcement->position(), fixedPosition);
+                QVERIFY(announcement->z() > item(root, "matchNotices")->z());
+                auto *map = item(root, "mapArea"); QVERIFY(map);
+                const auto killBox = announcement->mapRectToItem(map, QRectF(QPointF(), announcement->size()));
+                QVERIFY(QRectF(QPointF(), map->size()).contains(killBox));
+                // 击杀覆盖提示框，不再通过纵向避让将整组卡片向下推。
+                bool overlapsCard = false;
+                for (const auto &name : names) {
+                    auto *card = item(root, name);
+                    const auto box = card->mapRectToItem(map, QRectF(QPointF(), card->size()));
+                    overlapsCard |= killBox.intersects(box);
+                }
+                QVERIFY(overlapsCard);
+                QDir().mkpath("test-artifacts");
+                QVERIFY(window.grabWindow().save(QString("test-artifacts/unified-notices-%1-%2.png")
+                    .arg(commander ? "commander" : "operator").arg(size.width())));
+                const qreal contentHeight = viewport->property("contentHeight").toReal();
+                if (contentHeight > viewport->height()) {
+                    viewport->setProperty("contentY", contentHeight - viewport->height());
+                    QTest::qWait(30);
+                    auto *last = item(root, names.last());
+                    const auto lastBox = last->mapRectToItem(viewport, QRectF(QPointF(), last->size()));
+                    QVERIFY(QRectF(QPointF(), viewport->size()).contains(lastBox));
+                    QCOMPARE(announcement->position(), fixedPosition);
+                    QVERIFY(window.grabWindow().save(QString("test-artifacts/unified-notices-last-row-%1-%2.png")
+                        .arg(commander ? "commander" : "operator").arg(size.width())));
+                }
+                mechanisms.Clear(); QVERIFY(s.send(mechanisms)); QTest::qWait(30); QVERIFY(settleNotices(root));
+            }
+            window.setSource(QUrl());
+        }
     }
 };
 int main(int argc, char **argv)

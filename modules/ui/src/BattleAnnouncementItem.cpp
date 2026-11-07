@@ -1,3 +1,4 @@
+#include "UiTheme.hpp"
 #include "BattleAnnouncementItem.hpp"
 
 #include <QFontMetrics>
@@ -27,7 +28,7 @@ void BattleAnnouncementItem::drawAvatar(QPainter &p, const QRect &rect, int id, 
 {
     p.save();
     const bool red = id < 100;
-    const QColor team = red ? QColor("#FF737A") : QColor("#50A0FF");
+    const QColor team = red ? QColor(ui::TeamRed) : QColor(ui::TeamBlue);
     const QString color = red ? QStringLiteral("red") : QStringLiteral("blue");
     p.setPen(QPen(team, 2)); p.setBrush(QColor(0, 0, 0, 180)); p.drawEllipse(rect);
     const int number = id % 100;

@@ -1,4 +1,5 @@
 import QtQuick
+import LY27.Ui 1.0
 
 Rectangle {
     id: root
@@ -6,63 +7,46 @@ Rectangle {
     property var match: ({})
     property bool blueView: false
     signal switchViewRequested()
-    color: "#10171d"
-
-    Rectangle { width: parent.width; height: 1; color: "#344653" }
+    color: Theme.panel
+    Rectangle { width: parent.width; height: 1; color: Theme.border }
     Item {
         id: heading
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        height: 28
-        Text {
-            x: 14
-            anchors.verticalCenter: parent.verticalCenter
-            text: "战场分析"
-            color: "#d9e6ef"
-            font.pixelSize: 14
-            font.bold: true
+        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+        height: 32
+        UiText {
+            x: 12; anchors.verticalCenter: parent.verticalCenter
+            text: "战场分析"; color: Theme.text; font.pixelSize: Theme.body; font.bold: true
         }
-        Text {
-            x: 116
-            anchors.verticalCenter: parent.verticalCenter
+        UiText {
+            x: 92; anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, viewButton.x - x - 12)
-            text: root.match.fresh ? "控制度净速度：按当前占领状态 · 点/比赛秒" : "等待赛事数据 · 请确认 MQTT 连接"
-            color: "#8297a8"
-            font.pixelSize: 11
-            elide: Text.ElideRight
+            text: root.match.fresh ? "即时战况 / 己方后勤" : "等待赛事数据 · 请确认 MQTT 连接"
+            color: Theme.muted; font.pixelSize: Theme.caption; elide: Text.ElideRight
         }
         Rectangle {
             id: viewButton
             objectName: "mapViewButton"
-            width: 110
-            height: 26
-            radius: 3
-            anchors.right: parent.right
-            anchors.rightMargin: 12
+            width: 122; height: 24; radius: 2
+            anchors.right: parent.right; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            color: viewMouse.containsMouse ? "#304352" : "#25323e"
-            Text {
+            color: viewMouse.pressed ? Theme.divider : viewMouse.containsMouse ? Theme.raised : Theme.inset
+            border.color: viewMouse.containsMouse ? Theme.secondary : Theme.border
+            Behavior on color { ColorAnimation { duration: Theme.quickMotion } }
+            UiText {
                 anchors.centerIn: parent
-                text: root.blueView ? "蓝方视角 ⇄" : "红方视角 ⇄"
-                color: "#e6edf5"
-                font.pixelSize: 12
+                text: (root.blueView ? "蓝方视角" : "红方视角") + "  ⇄"
+                color: Theme.text; font.pixelSize: Theme.caption
             }
             MouseArea {
                 id: viewMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
+                anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                 onClicked: root.switchViewRequested()
             }
         }
     }
     MatchResources {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: heading.bottom
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 6
+        anchors.left: parent.left; anchors.right: parent.right
+        anchors.top: heading.bottom; anchors.bottom: parent.bottom; anchors.bottomMargin: 8
         match: root.match
     }
 }

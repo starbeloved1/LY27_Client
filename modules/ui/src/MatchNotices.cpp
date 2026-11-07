@@ -1,3 +1,4 @@
+#include "UiTheme.hpp"
 #include "MatchNotices.hpp"
 #include "EventListModel.hpp"
 
@@ -107,7 +108,7 @@ void MatchNotices::observe(const QString &topic)
     if (notice.isEmpty()) return;
     // 连续相同事件不重启动画/延长遮挡，能量进度不抢占仍在显示的危险警告。
     if ((!m_event.isEmpty() && m_event.value("text") == notice.value("text")) ||
-        (id == 3 && m_event.value("accent") == QStringLiteral("#FF737A"))) return;
+        (id == 3 && m_event.value("accent") == QString::fromLatin1(ui::TeamRed))) return;
     notice.insert("token", ++m_sequence);
     m_event = std::move(notice);
     m_eventTimer.start(5000); emit eventChanged();

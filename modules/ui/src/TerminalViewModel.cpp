@@ -1,3 +1,4 @@
+#include "UiTheme.hpp"
 #include "TerminalViewModel.hpp"
 #include "BuffPresentation.hpp"
 
@@ -202,6 +203,10 @@ void TerminalViewModel::refresh()
         {"redScore", number(game.redScore)}, {"blueScore", number(game.blueScore)},
         {"stage", paused ? QStringLiteral("比赛暂停") : stageName(game.stage)},
         {"paused", paused}, {"fresh", game.remainingSeconds.isFresh()},
+        // 只控制展示动效：失效及换会话时立即清掉离场快照，避免旧通告跨局残留。
+        {"noticesLive", game.stage.isFresh() && *game.stage.value == GameStage::Battle && game.paused.isFresh() && !paused},
+        {"noticeEpoch", game.stage.source.received ? QStringLiteral("%1/%2/%3")
+            .arg(game.stage.source.sessionId).arg(game.stage.source.connection).arg(game.stage.source.roundRevision) : QString{}},
         {"redBaseHp", number(redBase.currentHealth)}, {"blueBaseHp", number(blueBase.currentHealth)},
         {"redBaseState", number(redBase.defenseState)}, {"blueBaseState", number(blueBase.defenseState)},
         {"redBaseStatusText", baseStatusText(redBase)}, {"blueBaseStatusText", baseStatusText(blueBase)},
@@ -235,7 +240,7 @@ void TerminalViewModel::updateTerritories(const GlobalState &global)
     const bool redAlly = m_identity.team == Team::Red;
     const auto state = [](bool known, bool red, bool temporary) {
         return QVariantMap{{"known", known}, {"controller", known ? (red ? "red" : "blue") : "unknown"},
-            {"temporary", known && temporary}, {"color", known ? (red ? "#FF737A" : "#62C9FF") : "#9AA8B4"},
+            {"temporary", known && temporary}, {"color", known ? (red ? ui::TeamRed : ui::TeamBlue) : ui::TerritoryUnknown},
             {"advancing", ""}, {"seconds", -1}};
     };
     const auto outpost = [&](const StateField<quint32> &field) {
@@ -379,7 +384,7 @@ void TerminalViewModel::updatePresentation(const MatchState &game, const GlobalS
         const QString actor = enemy ? QStringLiteral("敌方") : QStringLiteral("己方");
         const qint64 seconds = raw < 0 ? -raw : raw;
         m_mechanisms.append(QVariantMap{{"id", id}, {"seconds", seconds}, {"target", target},
-            {"actor", actor}, {"enemy", enemy}, {"accent", enemy ? "#FF737A" : "#60D8B7"},
+            {"actor", actor}, {"enemy", enemy}, {"accent", enemy ? ui::TeamRed : ui::Positive},
             {"text", QStringLiteral("%1还有%2秒激活%3").arg(actor).arg(seconds).arg(target)}});
     }
     std::stable_sort(m_mechanisms.begin(), m_mechanisms.end(), [](const QVariant &a, const QVariant &b) {

@@ -5,7 +5,7 @@ Rectangle {
     id: root
     width: 1280
     height: 800
-    color: "#11161b"
+    color: Theme.background
     property var viewModel: terminal
     readonly property bool blueView: viewModel ? viewModel.blueView : false
     readonly property var tactics: viewModel ? viewModel.tactics : null
@@ -23,17 +23,31 @@ Rectangle {
         anchors.top: header.bottom
         anchors.bottom: analysis.top
         anchors.left: events.right
+        anchors.leftMargin: Theme.gap
         anchors.right: parent.right
         clip: true
+        Rectangle { anchors.fill: parent; color: Theme.panel }
         Image {
             id: battlefield
             objectName: "battlefieldImage"
             anchors.fill: parent
-            source: "maps/battlefield.png"
+            source: "image://battlefield/map"
             fillMode: Image.PreserveAspectFit
             smooth: true
             mipmap: true
             rotation: root.blueView ? 180 : 0
+        }
+        // 保留验收标识作为图片内框，不再叠灰色蒙层；色调由缓存的图片提供器完成。
+        Rectangle {
+            objectName: "mapContrastVeil"
+            width: battlefield.paintedWidth; height: battlefield.paintedHeight
+            anchors.centerIn: parent
+            color: "transparent"; border.color: Theme.divider
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"; border.color: Theme.border
+            z: 2
         }
         // 标记跟随实际图片区域，不把窗口留白算进场地。
         Item {
@@ -157,12 +171,12 @@ Rectangle {
             width: Math.min(parent.width - 12, hint.implicitWidth + 24)
             height: 26; radius: 3; z: 21
             visible: root.tactics ? root.tactics.commander || root.tactics.feedback.length > 0 : false
-            color: "#e80a121a"
-            Text {
+            color: Theme.overlay
+            UiText {
                 id: hint
                 anchors.fill: parent; anchors.margins: 4
                 text: root.tactics ? root.tactics.feedback || "指挥手：选择己方车 → 点击目标；右键 / Esc 取消" : ""
-                color: "#ffe08a"; font.pixelSize: 12
+                color: Theme.tactical; font.pixelSize: 12
                 horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
             }
         }
@@ -176,11 +190,11 @@ Rectangle {
             y: compact ? 6 : parent.height - height - 8
             width: compact ? selfBuffs.width + 12 : Math.max(134, selfBuffs.width + 20)
             height: compact ? 24 : 48
-            color: "#ed0b1720"; border.color: "#72808a"; radius: 3; z: 20
-            Text {
+            color: Theme.overlay; border.color: Theme.border; radius: 3; z: 20
+            UiText {
                 x: 10; y: 5
                 visible: !selfBuffPanel.compact
-                text: "本机增益"; color: "#d6e5ef"; font.pixelSize: 11
+                text: "本机增益"; color: Theme.secondary; font.pixelSize: 11
             }
             BuffRow {
                 id: selfBuffs
@@ -194,31 +208,24 @@ Rectangle {
         MatchNotices {
             id: matchNotices
             anchors.top: parent.top
-            anchors.topMargin: parent.height < 180 ? (selfBuffPanel.visible && !matchNotices.timed.length ? 34 : 6) : 12
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(680, parent.width - 24)
+            anchors.topMargin: parent.height < 180 ? (selfBuffPanel.visible ? 34 : 6) : 12
+            anchors.left: parent.left
+            anchors.leftMargin: 12
+            width: parent.width - 24
             controller: root.viewModel ? root.viewModel.notices : null
-            timedRightInset: selfBuffPanel.compact && selfBuffPanel.visible ? selfBuffPanel.width + 8 : 0
+            mechanisms: root.viewModel ? root.viewModel.mechanisms : []
+            animationsAllowed: root.viewModel ? (root.viewModel.match.noticesLive ?? false) : false
+            epoch: root.viewModel ? (root.viewModel.match.noticeEpoch ?? "") : ""
             z: 12
-        }
-        MechanismNotices {
-            id: mechanismNotices
-            anchors.top: parent.top
-            anchors.topMargin: matchNotices.visible ? matchNotices.y + matchNotices.height + 8 : 12
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(1320, parent.width - 24)
-            notices: root.viewModel ? root.viewModel.mechanisms : []
-            z: 10
         }
         BattleAnnouncement {
             anchors.horizontalCenter: parent.horizontalCenter
-            y: Math.max(4, Math.min(parent.height - height - 4,
-                mechanismNotices.height > 0 ? mechanismNotices.y + mechanismNotices.height + 8
-                    : matchNotices.visible ? matchNotices.y + matchNotices.height + 8 : 24))
+            // 击杀/前哨摧毁播报保持固定位置，覆盖通告框，不随框的数量向下挪动。
+            y: Math.max(4, Math.min(24, parent.height - height - 4))
             width: Math.min(600, parent.width - 24)
             height: 50
             notice: root.viewModel ? root.viewModel.battleNotice : ({})
-            z: 11
+            z: 20
         }
     }
     EventPanel {
@@ -239,9 +246,8 @@ Rectangle {
     }
     BattleAnalysisPanel {
         id: analysis
-        // 宽度受限时用地图之外的余高放分析板；高度受限时保留紧凑信息区，将其余空间让给地图。
-        height: Math.round(Math.max(width < 760 ? 184 : 148, Math.min(width < 760 ? 194 : 170,
-            root.height - header.height - (root.width - events.width) / root.mapAspect)))
+        // 保留三个分区；窄屏为后勤保留第二行，常规窗口压缩面板空白。
+        height: width < 760 ? 198 : 132
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

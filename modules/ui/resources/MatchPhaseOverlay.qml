@@ -1,4 +1,5 @@
 import QtQuick
+import LY27.Ui 1.0
 
 Item {
     id: root
@@ -50,7 +51,7 @@ Item {
                     : root.phase.urgent ? "images/gamephase/gamestatus_red.png" : "images/gamephase/gamestatus_cyan.png"
                 fillMode: Image.Stretch
             }
-            Text {
+            UiText {
                 objectName: "matchPhaseTimer"
                 x: 24; y: 40; width: parent.width - 48; height: 45
                 text: root.kind === "settlement" ? "—" : (root.phase.timer || "--:--")
@@ -58,14 +59,14 @@ Item {
                 font.pixelSize: 32; font.bold: true
                 horizontalAlignment: Text.AlignHCenter
             }
-            Text {
+            UiText {
                 objectName: "matchPhaseTitle"
                 x: 24; y: 102; width: parent.width - 48; height: 35
                 text: root.phase.title || ""
-                color: "#ffffff"; font.pixelSize: 23; font.bold: true
+                color: Theme.text; font.pixelSize: 23; font.bold: true
                 horizontalAlignment: Text.AlignHCenter
             }
-            Text {
+            UiText {
                 x: 32; y: 155; width: parent.width - 64; height: 50
                 text: root.phase.description || ""
                 color: "#c2d5e1"; font.pixelSize: 16
@@ -89,7 +90,7 @@ Item {
             cache: false
             smooth: true
         }
-        Text {
+        UiText {
             objectName: "matchResultTitle"
             visible: root.art === ""
             anchors.centerIn: parent
@@ -104,7 +105,7 @@ Item {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Math.max(24, parent.height * 0.06)
             spacing: 10
-            Text {
+            UiText {
                 objectName: "matchResultScore"
                 width: parent.width
                 text: "第 " + (root.match.currentRound > 0 ? root.match.currentRound : "—") + " 局　"
@@ -114,7 +115,7 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 fontSizeMode: Text.Fit; minimumPixelSize: 12
             }
-            Text {
+            UiText {
                 objectName: "matchResultReason"
                 width: parent.width
                 text: root.phase.description || ""
@@ -127,7 +128,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 color: resultMouse.containsMouse ? "#304655" : "#1c2b36"
                 border.color: "#526979"; radius: 3
-                Text { anchors.centerIn: parent; text: "收起战报"; color: "#e4edf3"; font.pixelSize: 13 }
+                UiText { anchors.centerIn: parent; text: "收起战报"; color: "#e4edf3"; font.pixelSize: 13 }
                 MouseArea {
                     id: resultMouse
                     anchors.fill: parent

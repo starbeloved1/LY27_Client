@@ -8,6 +8,7 @@
  */
 
 import QtQuick 2.15
+import LY27.Ui 1.0
 
 Item {
     id: root
@@ -66,7 +67,7 @@ Item {
         id: trailAnim
         target: root
         property: "trailHealth"
-        duration: 260
+        duration: Theme.numericMotion
         easing.type: Easing.OutCubic
     }
 
@@ -160,8 +161,19 @@ Item {
     }
 
 
+    // 满槽参照刻度不随剩余血量裁切，半血对应第五格。
+    Repeater {
+        model: 9
+        Rectangle {
+            required property int index
+            x: (index + 1) * root.width / 10
+            y: root.height * .25; width: 1; height: root.height * .5
+            color: Theme.ink; opacity: .32
+        }
+    }
+
     // 血量数字
-    Text {
+    UiText {
         visible: root.showHealthText
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: root.isBlue ? parent.left : undefined
@@ -170,7 +182,8 @@ Item {
         anchors.rightMargin: root.healthTextInset
         objectName: "baseHealthValue"
         text: root.currentHealth >= 0 ? root.currentHealth.toString() : "—"
-        color: "white"
+        color: root.currentHealth >= 0 ? Theme.text : Theme.unknown
+        font.family: Theme.numberFont
         font.pixelSize: root.healthFontSize
         font.bold: true
         style: Text.Outline

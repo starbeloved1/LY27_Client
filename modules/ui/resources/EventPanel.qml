@@ -1,85 +1,89 @@
 import QtQuick
+import LY27.Ui 1.0
 
 Rectangle {
     id: root
     objectName: "eventPanel"
     property var eventModel: null
-    color: "#111b24"
-    border.color: "#2b3b49"
-    Text {
-        x: 14; y: 12
-        text: "战场事件"
-        color: "#f0c478"; font.pixelSize: 16; font.bold: true
+    readonly property bool cramped: width < 180
+    color: Theme.panel
+    UiText {
+        x: 12; y: 12
+        text: "战场事件"; color: Theme.text; font.pixelSize: Theme.heading; font.bold: true
     }
-    Text {
-        anchors.right: parent.right; anchors.rightMargin: 14
-        y: 16
-        text: list.count + " / 50"
-        color: "#8da2b3"; font.pixelSize: 11
+    UiText {
+        anchors.right: parent.right; anchors.rightMargin: 12; y: 15
+        text: list.count; color: Theme.secondary; font.pixelSize: Theme.caption; font.family: Theme.numberFont
     }
-    Rectangle { x: 12; y: 42; width: parent.width - 24; height: 1; color: "#324452" }
+    Rectangle { x: 12; y: 42; width: parent.width - 24; height: 1; color: Theme.divider }
     ListView {
         id: list
         objectName: "eventList"
         anchors.fill: parent
-        anchors.topMargin: 53; anchors.bottomMargin: 12
+        anchors.topMargin: 50; anchors.bottomMargin: 12
         anchors.leftMargin: 12; anchors.rightMargin: 12
         model: root.eventModel
-        clip: true
-        spacing: 8
+        clip: true; spacing: 0
         boundsBehavior: Flickable.StopAtBounds
         property bool followTail: true
-        function scrollToTail() {
-            if (followTail) positionViewAtEnd()
-        }
-        function requestTailScroll() {
-            followTail = true
-            Qt.callLater(scrollToTail)
-        }
-        // 沿用 26：按收到的顺序追加，新增消息滚动至列表末尾。
+        function scrollToTail() { if (followTail) positionViewAtEnd() }
+        function requestTailScroll() { followTail = true; Qt.callLater(scrollToTail) }
+        // 保持现有历史顺序、自动跟随和手动查看行为，只更改行的视觉层级。
         onCountChanged: requestTailScroll()
         onHeightChanged: requestTailScroll()
         onWidthChanged: requestTailScroll()
-        // 窗口变窄后长事件会重新换行，等委托高度更新再对齐列表末尾。
         onContentHeightChanged: if (followTail) Qt.callLater(scrollToTail)
-        // 用户主动查看历史时，不因委托高度重新估算而跳回最新事件。
         onMovementStarted: followTail = false
-        delegate: Rectangle {
+        delegate: Item {
             id: row
             required property int index
+            required property int eventId
             required property string eventTime
             required property string eventText
             required property string eventColor
             required property string eventTimeSource
+            readonly property bool income: eventId === 0
+            readonly property bool major: eventId === 1 || eventId === 2 || eventId === 11 || eventId === 14
+            readonly property string symbol: income ? "+" : major ? "!" : eventId >= 5 && eventId <= 8 ? "◇" : "·"
             width: ListView.view.width
-            height: message.implicitHeight + 42
-            color: "#192630"
-            radius: 3
-            Rectangle { width: 3; height: parent.height - 12; y: 6; color: row.eventColor; radius: 1 }
-            Text {
-                x: 12; y: 8; width: parent.width - 24
-                text: row.eventTime + " · " + row.eventTimeSource
-                color: "#91a8ba"; font.pixelSize: 10
+            height: Math.max(40, message.implicitHeight + (root.cramped ? 36 : 18))
+            Rectangle { width: parent.width; height: 1; anchors.bottom: parent.bottom; color: Theme.divider; opacity: .7 }
+            UiText {
+                x: 0; y: 10; width: 50; height: 16
+                text: row.eventTime; color: Theme.muted; font.pixelSize: Theme.caption; font.family: Theme.numberFont
+                fontSizeMode: Text.Fit; minimumPixelSize: 10
                 textFormat: Text.PlainText
+                HoverHandler { id: timeHover }
+                Rectangle {
+                    visible: timeHover.hovered; y: 18; z: 4
+                    width: timeSource.implicitWidth + 12; height: 22; color: Theme.overlay; border.color: Theme.border; radius: 2
+                    UiText { id: timeSource; anchors.centerIn: parent; text: row.eventTimeSource; font.pixelSize: Theme.caption }
+                }
             }
-            Text {
+            Rectangle {
+                x: 54; y: 10; width: 13; height: 15; radius: 2
+                color: row.income ? Qt.rgba(Theme.positive.r, Theme.positive.g, Theme.positive.b, .12) : "transparent"
+                UiText {
+                    anchors.centerIn: parent; text: row.symbol
+                    color: row.income ? Theme.positive : row.eventColor
+                    font.pixelSize: Theme.caption; font.bold: row.major
+                }
+            }
+            UiText {
                 id: message
                 objectName: "eventMessage" + row.index
-                x: 12; y: 27; width: parent.width - 24
+                x: root.cramped ? 0 : 72; y: root.cramped ? 28 : 8; width: parent.width - x
                 text: row.eventText
-                color: row.eventColor; font.pixelSize: 12
-                wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                lineHeight: 1.15
+                color: row.income ? Theme.secondary : row.major ? row.eventColor : Theme.text
+                font.pixelSize: Theme.body; font.bold: row.major
+                wrapMode: Text.Wrap; textFormat: Text.PlainText; lineHeight: 1.10
             }
         }
     }
-    Text {
-        anchors.centerIn: list
-        width: list.width
+    UiText {
+        anchors.centerIn: list; width: list.width
         visible: list.count === 0
-        text: "暂无事件"
-        color: "#708697"; font.pixelSize: 13
+        text: "暂无事件"; color: Theme.muted; font.pixelSize: Theme.body
         horizontalAlignment: Text.AlignHCenter
     }
 }

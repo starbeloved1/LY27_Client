@@ -1,3 +1,4 @@
+#include "UiTheme.hpp"
 #include "EventListModel.hpp"
 
 #include <QDateTime>
@@ -6,9 +7,9 @@
 
 namespace ly27 {
 namespace {
-const QString normal = QStringLiteral("#E5E5E5");
-const QString danger = QStringLiteral("#FF737A");
-const QString success = QStringLiteral("#60D8B7");
+const QString normal = QString::fromLatin1(ui::Text);
+const QString danger = QString::fromLatin1(ui::TeamRed);
+const QString success = QString::fromLatin1(ui::Positive);
 QString robotName(int id)
 {
     QString name;

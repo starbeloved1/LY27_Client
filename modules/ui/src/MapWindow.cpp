@@ -1,9 +1,12 @@
 #include "MapWindow.hpp"
+#include "UiTheme.hpp"
 #include "TerminalViewModel.hpp"
 #include "BattleAnnouncementItem.hpp"
 #include "TerritoryOverlayItem.hpp"
 
 #include <QResource>
+#include <QPainter>
+#include <array>
 #include <QKeyEvent>
 #include <QQuickItem>
 #include <QQuickImageProvider>
@@ -20,6 +23,35 @@ static void initializeUiResources()
 
 namespace ly27 {
 namespace {
+// 底图的色调只计算一次，各窗口/缩放共用缓存；不依赖 GPU 特效或修改原素材。
+class BattlefieldImageProvider final : public QQuickImageProvider {
+public:
+    BattlefieldImageProvider() : QQuickImageProvider(QQuickImageProvider::Image) {}
+    QImage requestImage(const QString &id, QSize *size, const QSize &) override
+    {
+        if (id != "map") return {};
+        static const QImage toned = [] {
+            QImage image(":/ly27/ui/maps/battlefield.png");
+            image = image.convertToFormat(QImage::Format_ARGB32);
+            std::array<int, 256> tone{};
+            for (int i = 0; i < 256; ++i)
+                tone[i] = qBound(0, qRound(((i - 128) * 1.06 + 128) * .80), 255);
+            for (int y = 0; y < image.height(); ++y) {
+                auto *line = reinterpret_cast<QRgb *>(image.scanLine(y));
+                for (int x = 0; x < image.width(); ++x) {
+                    const auto pixel = line[x];
+                    const int r = qRed(pixel), g = qGreen(pixel), b = qBlue(pixel);
+                    const int luminance = (r * 54 + g * 183 + b * 19 + 128) >> 8;
+                    const auto channel = [&](int value) { return tone[(value * 55 + luminance * 45 + 50) / 100]; };
+                    line[x] = qRgba(channel(r), channel(g), channel(b), qAlpha(pixel));
+                }
+            }
+            return image;
+        }();
+        if (size) *size = toned.size();
+        return toned;
+    }
+};
 class BuffImageProvider final : public QQuickImageProvider {
 public:
     BuffImageProvider() : QQuickImageProvider(QQuickImageProvider::Image) {}
@@ -52,18 +84,44 @@ public:
         if (id != "red_map_outpost.png" && id != "blue_map_outpost.png") return {};
         QImage image(QStringLiteral(":/ly27/ui/images/minimap/") + id);
         image = image.convertToFormat(QImage::Format_ARGB32);
-        // 在保留原图轮廓与透明度的基础上提亮、提高色彩饱和度，兼容软件渲染。
+        QImage glow(image.size(), QImage::Format_ARGB32_Premultiplied);
+        glow.fill(Qt::transparent);
+        // 原素材的渐隐柔光与清晰主体分层保留，避免锐化时把外发光一起截掉。
         for (int y = 0; y < image.height(); ++y) {
             auto *line = reinterpret_cast<QRgb *>(image.scanLine(y));
             for (int x = 0; x < image.width(); ++x) {
                 const QColor pixel = QColor::fromRgba(line[x]);
                 if (pixel.alpha() == 0) continue;
-                line[x] = QColor::fromHsvF(pixel.hsvHueF(), qMin(1.0f, pixel.hsvSaturationF() * 1.35f),
-                    qMin(1.0f, pixel.valueF() * 1.18f), pixel.alphaF()).rgba();
+                const auto tinted = QColor::fromHsvF(pixel.hsvHueF(), qMin(1.0f, pixel.hsvSaturationF() * 1.55f),
+                    pixel.valueF() * .84f, qMin(1.0f, pixel.alphaF() * 1.15f));
+                glow.setPixelColor(x, y, tinted);
+                const qreal edge = qBound(0.0, (pixel.alpha() - 18) / 72.0, 1.0);
+                const qreal alpha = edge * edge * (3 - 2 * edge);
+                if (pixel.alpha() >= 140 && pixel.hsvSaturationF() < .4f) {
+                    QColor symbol(ui::HeadingInk); symbol.setAlphaF(alpha); line[x] = symbol.rgba();
+                } else {
+                    line[x] = QColor::fromHsvF(pixel.hsvHueF(), qMin(1.0f, pixel.hsvSaturationF() * 1.55f),
+                        pixel.valueF() * .84f, alpha).rgba();
+                }
             }
         }
+        // 仅沿符号自身轮廓外扩一个素材像素，不增加圆环或独立底板。
+        QImage outlined(image.size(), QImage::Format_ARGB32_Premultiplied);
+        outlined.fill(Qt::transparent);
+        for (int y = 0; y < image.height(); ++y) for (int x = 0; x < image.width(); ++x) {
+            int alpha = 0;
+            for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+                if (x + dx < 0 || x + dx >= image.width() || y + dy < 0 || y + dy >= image.height()) continue;
+                alpha = qMax(alpha, qAlpha(image.pixel(x + dx, y + dy)));
+            }
+            outlined.setPixelColor(x, y, QColor(9, 16, 23, qRound(alpha * .55)));
+        }
+        QPainter painter(&glow);
+        painter.drawImage(0, 0, outlined);
+        painter.drawImage(0, 0, image);
+        painter.end();
         if (size) *size = image.size();
-        return image;
+        return glow;
     }
 };
 
@@ -85,6 +143,9 @@ MapWindow::MapWindow(TerminalViewModel *model, QWindow *parent)
     : QQuickView(parent), m_tactics(model ? model->tactics() : nullptr)
 {
     initializeUiResources();
+    static const int themeType = qmlRegisterSingletonType<UiTheme>("LY27.Ui", 1, 0, "Theme",
+        [](QQmlEngine *, QJSEngine *) -> QObject * { return new UiTheme; });
+    Q_UNUSED(themeType);
     static const int announcementType = qmlRegisterType<BattleAnnouncementItem>("LY27.Ui", 1, 0, "BattleAnnouncementItem");
     Q_UNUSED(announcementType);
     static const int territoryType = qmlRegisterType<TerritoryOverlayItem>("LY27.Ui", 1, 0, "TerritoryOverlayItem");
@@ -98,6 +159,7 @@ MapWindow::MapWindow(TerminalViewModel *model, QWindow *parent)
     resize(1280, 800);
     rootContext()->setContextProperty(QStringLiteral("terminal"), model);
     rootContext()->setContextProperty(QStringLiteral("desktopWindow"), this);
+    engine()->addImageProvider(QStringLiteral("battlefield"), new BattlefieldImageProvider);
     engine()->addImageProvider(QStringLiteral("outpost"), new OutpostImageProvider);
     engine()->addImageProvider(QStringLiteral("buff"), new BuffImageProvider);
     setSource(QUrl(QStringLiteral("qrc:/ly27/ui/Map.qml")));

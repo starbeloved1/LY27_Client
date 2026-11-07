@@ -1,4 +1,6 @@
 add_library(ly27_ui STATIC
+    include/UiTheme.hpp
+    src/UiTheme.cpp
     include/MatchNotices.hpp
     src/MatchNotices.cpp
     include/BuffPresentation.hpp
@@ -30,10 +32,15 @@ file(GLOB ly27_battle_images CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/robots/*.png")
 file(GLOB ly27_buff_images CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buffs/*.png")
 qt_add_resources(ly27_ui ly27_ui_resources
+    # 图片数据直接写入资源目标文件，避免将动画展开成数百 MB 的 C++ 数组。
+    BIG_RESOURCES
     PREFIX "/ly27/ui"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/resources"
     FILES
+        resources/UiText.qml
         resources/BattleAnnouncement.qml
+        resources/BattleNoticeCard.qml
+        resources/AnimatedNotice.qml
         resources/BuffRow.qml
         resources/MatchNotices.qml
         ${ly27_buff_images}

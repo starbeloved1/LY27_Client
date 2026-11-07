@@ -1,4 +1,5 @@
 import QtQuick
+import LY27.Ui 1.0
 
 Item {
     id: root
@@ -16,7 +17,7 @@ Item {
     readonly property bool tiny: mapHeight < 180
     readonly property bool healthKnown: health >= 0 && maximum > 0
     readonly property real ratio: healthKnown ? Math.max(0, Math.min(1, health / maximum)) : 0
-    readonly property color accent: blue ? "#52bdff" : "#ff6975"
+    readonly property color accent: blue ? Theme.teamBlueFill : Theme.teamRedFill
     width: 1; height: 1
     z: 2
     MouseArea {
@@ -36,7 +37,7 @@ Item {
         objectName: "facilityMapIcon"
         visible: root.outpost
         source: root.outpost ? "image://outpost/" + (root.blue ? "blue" : "red") + "_map_outpost.png" : ""
-        width: root.tiny ? Math.min(30, root.mapHeight * 0.18) : 56
+        width: root.tiny ? Math.min(33, root.mapHeight * 0.20) : 62
         height: width * 72 / 60
         x: -width / 2; y: -height / 2
         fillMode: Image.PreserveAspectFit
@@ -46,7 +47,8 @@ Item {
     Item {
         id: caption
         objectName: "facilityMapCaption"
-        width: 60; height: 14
+        // 建筑血条比车辆更细长，便于在地图上区分设施与机器人。
+        width: 72; height: 8
         // 血条放在设施轮廓和图标上方；临近图片边缘时整体向内收。
         readonly property real groupWidth: Math.max(width, buffIcons.width)
         x: Math.max(2 - root.x, Math.min(-width / 2, root.mapWidth - root.x - groupWidth - 2))
@@ -56,29 +58,29 @@ Item {
             id: track
             objectName: "facilityMapHealthTrack"
             anchors.fill: parent
-            radius: 3
-            color: "#f0131d26"
+            radius: 2
+            color: Theme.overlay
             Rectangle {
                 objectName: "facilityMapHealthFill"
                 x: 1; y: 1
                 height: parent.height - 2
                 width: (parent.width - 2) * root.ratio
-                radius: 2
+                radius: 1
                 color: root.accent
-                Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                Behavior on width { NumberAnimation { duration: Theme.healthMotion; easing.type: Easing.OutCubic } }
             }
             Rectangle {
                 anchors.fill: parent
                 radius: parent.radius
                 color: "transparent"
-                border.color: root.healthKnown ? "#efd17c" : "#8192a0"
+                border.color: root.healthKnown ? Theme.ink : Theme.unknown
             }
-            Text {
+            UiText {
                 objectName: "facilityMapHealthUnknown"
                 visible: !root.healthKnown
                 anchors.fill: parent
                 text: "?"
-                color: "#ffffff"; font.pixelSize: 10
+                color: Theme.text; font.pixelSize: 8; font.family: Theme.numberFont
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }

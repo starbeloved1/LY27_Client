@@ -1,4 +1,5 @@
 import QtQuick
+import LY27.Ui 1.0
 
 Canvas {
     id: root
@@ -10,8 +11,8 @@ Canvas {
         ctx.clearRect(0, 0, width, height)
         ctx.save()
         ctx.scale(width / 26, height / 26)
-        ctx.fillStyle = "#ffe08a"
-        ctx.strokeStyle = "#ffe08a"
+        ctx.fillStyle = Theme.tactical
+        ctx.strokeStyle = Theme.tactical
         ctx.lineWidth = 2.5
         ctx.lineJoin = "round"
         ctx.lineCap = "round"

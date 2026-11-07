@@ -1,10 +1,11 @@
 import QtQuick 2.15
+import LY27.Ui 1.0
 
 Rectangle {
     id: root
 
     property string title: ""
-    property color accent: "#36d6ff"
+    property color accent: Theme.secondary
     property real panelOpacity: 0.72
     property string eyebrow: ""
     property bool showDiagonalTexture: true
@@ -120,7 +121,7 @@ Rectangle {
         opacity: 0.62
     }
 
-    Text {
+    UiText {
         visible: root.title.length > 0
         anchors.left: parent.left
         anchors.leftMargin: root.cutSize + 12
@@ -132,7 +133,7 @@ Rectangle {
         font.bold: true
     }
 
-    Text {
+    UiText {
         visible: root.eyebrow.length > 0
         anchors.right: parent.right
         anchors.rightMargin: 10

@@ -1,3 +1,4 @@
+#include "UiTheme.hpp"
 #include "TerritoryOverlayItem.hpp"
 
 #include <QPainter>
@@ -51,7 +52,7 @@ TerritoryOverlayItem::TerritoryOverlayItem(QQuickItem *parent) : QQuickPaintedIt
         transition.current = transition.from = transition.target = styleForState({});
         transition.animation = new QVariantAnimation(this);
         transition.animation->setObjectName("territoryTransition_" + territoryKeys[index]);
-        transition.animation->setDuration(600);
+        transition.animation->setDuration(ui::TerritoryMotion);
         transition.animation->setStartValue(0.0);
         transition.animation->setEndValue(1.0);
         transition.animation->setEasingCurve(QEasingCurve::InOutCubic);
@@ -131,10 +132,10 @@ QVariantMap TerritoryOverlayItem::regionState(int index) const
 
 TerritoryOverlayItem::VisualStyle TerritoryOverlayItem::styleForState(const QVariantMap &state)
 {
-    if (!state.value("known").toBool()) return {QColor("#9AA8B4"), QColor(228, 235, 242, 145), 0};
+    if (!state.value("known").toBool()) return {QColor(ui::TerritoryUnknown), QColor(255, 255, 255, 55), 0};
     const bool red = state.value("controller").toString() == "red";
-    return {QColor(red ? "#FF737A" : "#62C9FF"),
-            red ? QColor(255, 242, 244, 205) : QColor(240, 250, 255, 205),
+    return {QColor(red ? ui::TeamRedFill : ui::TeamBlueFill),
+            QColor(255, 255, 255, 95),
             state.value("temporary").toBool() ? 1.0 : 0.0};
 }
 
@@ -197,13 +198,13 @@ void TerritoryOverlayItem::paint(QPainter *painter)
                 bands.lineTo(x, intercept - slope * x + std::sin(x * .025 + m_phase * tau) * 1.3);
         }
         painter->setBrush(Qt::NoBrush);
-        painter->setPen(QPen(QColor(245, 252, 255, 35), lineWidth + 5)); painter->drawPath(bands);
-        painter->setPen(QPen(QColor(250, 253, 255, 65), lineWidth + 2)); painter->drawPath(bands);
+        painter->setPen(QPen(QColor(255, 255, 255, 26), lineWidth + 4)); painter->drawPath(bands);
+        painter->setPen(QPen(QColor(255, 255, 255, 50), lineWidth + 1.5)); painter->drawPath(bands);
         painter->setPen(QPen(visual.band, lineWidth)); painter->drawPath(bands);
         painter->restore();
-        // 多层细描边形成柔光，不遮住机器人标记，也不依赖整幅纹理模糊。
+        // 加粗队色核心并向外逐层渐隐，保留柔光轮廓，不依赖整幅纹理模糊。
         painter->setBrush(Qt::NoBrush);
-        for (const auto &stroke : {QPair<qreal, int>{11, 15}, {6, 35}, {3, 75}, {1.7, 245}}) {
+        for (const auto &stroke : {QPair<qreal, int>{9, 20}, {6, 45}, {3.8, 95}, {2.2, 230}}) {
             QColor color = visual.border; color.setAlpha(known ? stroke.second : stroke.second / 2);
             QPen border(color, stroke.first, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
             // 各层使用相同像素长度的虚线，不能随描边宽度扩大虚线周期。
@@ -218,7 +219,7 @@ void TerritoryOverlayItem::paint(QPainter *painter)
         const QString advancing = state.value("advancing").toString();
         const qint64 seconds = state.value("seconds", -1).toLongLong();
         if (!advancing.isEmpty() && seconds > 0) {
-            const QColor actor = advancing == "red" ? QColor("#FF737A") : QColor("#62C9FF");
+            const QColor actor = advancing == "red" ? QColor(ui::TeamRed) : QColor(ui::TeamBlue);
             QPen highlights(actor, 2.5, Qt::CustomDashLine, Qt::RoundCap, Qt::RoundJoin);
             highlights.setDashPattern({4, 18}); highlights.setDashOffset(-m_phase * 44);
             painter->setPen(highlights); painter->drawPath(path);
@@ -229,7 +230,7 @@ void TerritoryOverlayItem::paint(QPainter *painter)
                 QPointF center(labels[index].x() / 1662 * width(), labels[index].y() / 946 * height());
                 if (m_blueView) center = QPointF(width() - center.x(), height() - center.y());
                 const QString text = QStringLiteral("%1推进 %2s").arg(advancing == "red" ? QStringLiteral("红方") : QStringLiteral("蓝方")).arg(seconds);
-                QFont font = painter->font(); font.setPixelSize(11); font.setBold(true); painter->setFont(font);
+                QFont font = painter->font(); font.setFamily(UiTheme::preferredTextFont()); font.setPixelSize(11); font.setBold(true); painter->setFont(font);
                 const qreal labelWidth = QFontMetricsF(font).horizontalAdvance(text) + 14;
                 QRectF box(center.x() - labelWidth / 2, center.y() - 11, labelWidth, 22);
                 box.moveLeft(qBound(2.0, box.left(), width() - box.width() - 2));

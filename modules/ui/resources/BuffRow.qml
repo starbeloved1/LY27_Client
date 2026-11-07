@@ -1,4 +1,5 @@
 import QtQuick
+import LY27.Ui 1.0
 
 Item {
     id: root
@@ -19,8 +20,8 @@ Item {
                 objectName: "mapBuff" + (index + 1)
                 visible: buff.icon !== undefined
                 width: 14; height: 14; radius: 2
-                color: "#ec0c151f"
-                border.color: "#72808a"
+                color: Theme.overlay
+                border.color: Theme.border
                 Image {
                     objectName: "mapBuffImage"
                     anchors.fill: parent; anchors.margins: 1
@@ -33,12 +34,12 @@ Item {
                 Rectangle {
                     visible: hover.hovered && parent.visible
                     width: label.implicitWidth + 12; height: 22
-                    y: root.tooltipAbove ? -25 : 17; z: 30; color: "#fa0b131c"; radius: 3
-                    Text {
+                    y: root.tooltipAbove ? -25 : 17; z: 30; color: Theme.overlay; radius: 3
+                    UiText {
                         id: label
                         anchors.centerIn: parent
                         text: buff.description ?? ""
-                        color: "#f4f8fd"; font.pixelSize: 11
+                        color: Theme.text; font.pixelSize: 11
                     }
                 }
             }

@@ -5,6 +5,9 @@
 #include <QGuiApplication>
 #include <QDir>
 #include <QQuickItem>
+#include <QQuickImageProvider>
+#include <QQmlEngine>
+#include <algorithm>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -37,6 +40,73 @@ QQuickItem *item(QQuickItem *root, const QString &name)
 class DesktopTest : public QObject {
     Q_OBJECT
 private slots:
+    void battlefieldToneIsCachedAndKeepsProjectionSize()
+    {
+        ly27::StateStore store(identity());
+        ly27::TerminalViewModel model(store, identity(), "红", "蓝");
+        ly27::MapWindow window(&model);
+        auto *provider = dynamic_cast<QQuickImageProvider *>(window.engine()->imageProvider("battlefield"));
+        QVERIFY(provider);
+        QSize size;
+        const auto image = provider->requestImage("map", &size, {});
+        const QImage original(":/ly27/ui/maps/battlefield.png");
+        QVERIFY(!image.isNull()); QCOMPARE(size, original.size()); QCOMPARE(image.size(), original.size());
+        QCOMPARE(provider->requestImage("map", nullptr, {}).cacheKey(), image.cacheKey());
+        QVERIFY(provider->requestImage("unknown", nullptr, {}).isNull());
+        qint64 brightnessBefore = 0, brightnessAfter = 0, chromaBefore = 0, chromaAfter = 0;
+        for (int y = 0; y < image.height(); y += 23) for (int x = 0; x < image.width(); x += 23) {
+            const auto before = original.pixelColor(x, y), after = image.pixelColor(x, y);
+            QCOMPARE(before.alpha(), after.alpha());
+            const auto brightness = [](const QColor &c) { return c.red() * 54 + c.green() * 183 + c.blue() * 19; };
+            const auto chroma = [](const QColor &c) { return std::max({c.red(), c.green(), c.blue()}) - std::min({c.red(), c.green(), c.blue()}); };
+            brightnessBefore += brightness(before); brightnessAfter += brightness(after);
+            chromaBefore += chroma(before); chromaAfter += chroma(after);
+        }
+        QVERIFY(brightnessAfter < brightnessBefore * .9);
+        QVERIFY(chromaBefore > 0); QVERIFY(chromaAfter < chromaBefore * .7);
+        auto *frame = item(window.rootObject(), "mapContrastVeil"); QVERIFY(frame);
+        QCOMPARE(frame->property("color").value<QColor>().alpha(), 0);
+        window.setSource(QUrl());
+    }
+    void commanderSelectionRetainsTeamColorAndHealthCenter()
+    {
+        for (auto team : {ly27::Team::Red, ly27::Team::Blue}) {
+            auto id = identity(team); id.role = ly27::Role::Commander; id.robotId.reset();
+            const int receiver = team == ly27::Team::Red ? 3 : 103;
+            qint64 now = 1000000000;
+            ly27::StateStore store(id, nullptr, [&] { return now; }); store.reset("marker-style"); store.setConnected(true);
+            ly27::TerminalViewModel model(store, id, "红", "蓝");
+            ly27::wire::GameStatus g; g.set_current_round(1); g.set_current_stage(4); g.set_is_paused(false);
+            QVERIFY(send(store, g, now));
+            ly27::wire::RobotPosition p; p.set_robot_id(receiver); p.set_x(12); p.set_y(7); p.set_yaw(45);
+            QVERIFY(send(store, p, now));
+            ly27::wire::RobotStaticStatus stat; stat.set_robot_id(receiver); stat.set_max_health(400); stat.set_level(10);
+            QVERIFY(send(store, stat, now));
+            ly27::MapWindow window(&model); window.show(); QTest::qWait(60);
+            auto *robot = item(window.rootObject(), "mapRobot" + QString::number(receiver)); QVERIFY(robot);
+            auto *caption = item(robot, "robotHealthCaption"); QVERIFY(caption);
+            auto *track = item(robot, "robotHealthTrack"); QVERIFY(track);
+            auto *badge = item(robot, "robotNumberBadge"); QVERIFY(badge);
+            const auto fill = robot->property("markerColor").value<QColor>();
+            const auto badgeColor = badge->property("color").value<QColor>();
+            // 底图加载后检查血槽本体的中心，不能把左侧等级格算进居中宽度。
+            QTRY_COMPARE(track->mapRectToItem(robot, QRectF(QPointF(), track->size())).center().x(), 0.0);
+            QVERIFY(caption->width() < badge->width() * 1.6); // 控制横向占位，不用长横杠压过棋子。
+            QVERIFY(item(robot, "robotHeadingWedge"));
+            model.tactics()->clickRobot(receiver);
+            QVERIFY(robot->property("selected").toBool());
+            QVERIFY(item(robot, "robotSelectionRing")->isVisible());
+            QCOMPARE(robot->property("markerColor").value<QColor>(), fill);
+            QCOMPARE(badge->property("color").value<QColor>(), badgeColor);
+            QVERIFY(!item(robot, "robotSelfRing")->isVisible());
+            QDir().mkpath("test-artifacts");
+            QTest::qWait(60);
+            QVERIFY(window.grabWindow().save(QString("test-artifacts/selection-keeps-team-%1.png").arg(receiver)));
+            model.tactics()->cancel(); QVERIFY(!item(robot, "robotSelectionRing")->isVisible());
+            QCOMPARE(robot->property("markerColor").value<QColor>(), fill);
+            window.setSource(QUrl());
+        }
+    }
     void baseHealthLengthMatchesNumericValue()
     {
         qint64 now = 1000000000;
@@ -119,7 +189,7 @@ private slots:
                         QVERIFY(icon);
                         QVERIFY(icon->isVisible());
                         QCOMPARE(icon->width(), facility->property("tiny").toBool()
-                            ? qMin(30.0, layer->height() * .18) : 56.0);
+                            ? qMin(33.0, layer->height() * .20) : 62.0);
                         QTRY_COMPARE(icon->property("status").toInt(), 1);
                         QCOMPARE(icon->property("source").toUrl().fileName(),
                                  i == 2 ? QString("red_map_outpost.png") : QString("blue_map_outpost.png"));
@@ -240,6 +310,8 @@ private slots:
                 const bool resource = names[a].contains("Economy") || names[a].contains("ControlPoints") ||
                     names[a].contains("Damage") || names[a].contains("TechLevel") || names[a].contains("EncryptionLevel");
                 QVERIFY2((resource ? rect(analysis) : header).contains(rect(text)), qPrintable(names[a]));
+                if (!resource)
+                    QVERIFY2(text->property("contentHeight").toReal() <= text->height() + 1, qPrintable(names[a]));
                 if (!names[a].contains("TeamName"))
                     QVERIFY2(text->property("contentWidth").toReal() <= text->width() + 1, qPrintable(names[a]));
                 for (int b = a + 1; b < names.size(); ++b)
@@ -274,15 +346,15 @@ private slots:
             for (const QString &prefix : {QString("red"), QString("blue")}) {
                 auto *logo = item(root, prefix + "TeamLogo");
                 auto *value = item(item(root, prefix + "BaseHealth"), "baseHealthValue");
-                auto *status = item(root, prefix + "BaseStatusText");
-                QVERIFY(logo && value && status);
+                QVERIFY(logo && value);
+                QVERIFY(!item(root, prefix + "BaseStatusText"));
                 QCOMPARE(logo->property("status").toInt(), 1);
                 QVERIFY(header.contains(rect(logo)));
+                QVERIFY(rect(item(root, prefix + "TeamName")).bottom() <= rect(item(root, prefix + "BaseHealth")).top());
                 QVERIFY(!rect(logo).intersects(rect(value)));
                 QVERIFY(!rect(logo).intersects(rect(item(root, prefix + "TeamName"))));
-                QVERIFY(!status->isVisible());
-                QCOMPARE(status->property("text").toString(), QString());
             }
+            QVERIFY(!item(root, "matchConnectionStatus"));
             for (int row = 0; row < 8; ++row) {
                 auto *marker = item(root, QString("mapRobot%1").arg(ids[row]));
                 auto *track = item(marker, "robotHealthTrack");
@@ -323,10 +395,10 @@ private slots:
             QVERIFY(value->property("contentWidth").toReal() <= value->width() + 1);
             QVERIFY(!value->property("truncated").toBool());
         }
-        QCOMPARE(item(root, "blueBaseStatusText")->property("text").toString(), QString("基地已摧毁"));
+        QCOMPARE(model.match()["blueBaseStatusText"].toString(), QString("基地已摧毁"));
         units.clear_base_status();
         QVERIFY(send(store, units, now));
-        QCOMPARE(item(root, "redBaseStatusText")->property("text").toString(), QString("状态未知"));
+        QCOMPARE(model.match()["redBaseStatusText"].toString(), QString("状态未知"));
         ly27::wire::RobotStaticStatus missingMaximum;
         missingMaximum.set_robot_id(3); missingMaximum.set_level(2);
         QVERIFY(send(store, missingMaximum, now));

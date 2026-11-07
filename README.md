@@ -10,7 +10,7 @@ RoboMaster 2027 自定义终端。使用 C++17、Qt 6.8 和 CMake，后端、命
 
 ## 构建
 
-后端依赖：C++17 编译器、CMake 3.22+、Ninja、Qt 6.8+ 的 Core、Network、Gui（用于图像）、Protobuf 3.15+（含匹配的 `protoc`）、Paho MQTT C 异步库 `paho-mqtt3a`，以及通过 pkg-config 查找的 FFmpeg 开发库 libavcodec ≥58、libavutil ≥56、libswscale ≥5。开启测试时还需要 Qt Test 和 Mosquitto 可执行程序。桌面端另需 Qt Quick 及 QtQuick QML 运行模块；桌面构建默认关闭，后端和 CLI 仍不依赖显示服务器或 Widgets。
+后端依赖：C++17 编译器、CMake 3.22+、Ninja、Qt 6.8+ 的 Core、Network、Gui（用于图像）、Protobuf 3.15+（含匹配的 `protoc`）、Paho MQTT C 异步库 `paho-mqtt3a`，以及通过 pkg-config 查找的 FFmpeg 开发库 libavcodec ≥58、libavutil ≥56、libswscale ≥5。开启测试时还需要 Qt Test 和 Mosquitto 可执行程序。桌面端另需 Qt Quick、QtQuick 及 QtQuick.Effects QML 运行模块（用于通告过渡模糊，随 Qt Quick 部署）；桌面构建默认关闭，后端和 CLI 仍不依赖显示服务器或 Widgets。
 
 在本目录执行，将 Qt 路径替换为本机实际位置：
 
@@ -29,6 +29,8 @@ cmake --preset local-dev
 cmake --build --preset local-dev --parallel 2
 ctest --preset local-dev
 ```
+
+界面已统一为哑光暗色面板与官方 HUD 素材的组合，使用共享主题、中文标签字体和等宽数字，保留现有布局与交互。具体取舍见 [视觉规范](docs/visual-design.md)。地图进一步采用缓存调色、低亮度纯白领地光带和有轻投影的战术棋子，选中保留队色；详见 [地图与车标视觉整理](docs/map-marker-design.md)。
 
 ## 运行
 
@@ -55,7 +57,7 @@ ctest --preset local-dev
 ./start.sh
 ```
 
-脚本自动选择本机 `local-dev` 预设（存在时），否则使用 `dev`，完成增量构建后启动桌面程序。从其他目录也可以使用脚本的绝对路径启动。需要指定预设时，例如运行 `LY27_PRESET=release ./start.sh`；新机器仍需先配置本机 Qt 和依赖路径。
+脚本自动选择本机 `local-dev` 预设（存在时），否则使用 `dev`，完成增量构建后启动桌面程序。界面资源使用 Qt `BIG_RESOURCES` 两阶段构建，图片和动画数据直接写入目标文件，避免展开成巨大的 C++ 数组；资源仍内嵌在程序中。从其他目录也可以使用脚本的绝对路径启动。需要指定预设时，例如运行 `LY27_PRESET=release ./start.sh`；新机器仍需先配置本机 Qt 和依赖路径。
 
 手动构建与启动的等价命令：
 
@@ -71,7 +73,7 @@ cmake --build --preset local-dev --target ly27_desktop --parallel 2
 ./start.sh --mqtt --red-team "红方队名" --blue-team "蓝方队名"
 ```
 
-可用 `--config config/terminal.local.json` 指定个人配置；默认读取可执行文件旁的 `config/terminal.example.json`。队名为本地显示参数，当前协议没有上报队名。桌面入口创建并管理同一个 `TerminalRuntime`，默认关闭图传。顶部包含局数、比分、阶段计时、双方基地血量（前哨站仅在地图显示），顶部信息栏采用更紧凑高度；事件侧栏收窄，分析板压缩留白，为地图保留更大空间；我方当前/累计经济、双方累计控制度/总伤害及己方科技/加密等级集中在横跨整个底部的战场分析板，控制度和伤害以红蓝水平柱对比，控制度按当前阵地占领状态显示我方相对对方的瞬时净速度（正绿负红，点/比赛秒），伤害不显示速度，科技与加密归为一组；地图以圆形车号、紧凑血条及左侧等级格显示八台地面机器人的状态，不显示机器人血量数字；并在两侧基地及两座前哨站位置显示无名称、无数字的细血条，前哨站额外叠加放大的 RM26 图标，左侧战场事件侧栏从顶部信息栏下方延伸到分析板上沿，保留最近 50 条，按时间追加并自动滚动；右侧上方地图等比例占满剩余可用空间，底部分析板提供红蓝视角切换。比赛准备/暂停、五秒倒计时、胜负结算复用 RM26 素材；地图上方显示己敌激活计时，事件栏另记录实际金币收入，击杀及前哨站摧毁复用 RM26 的头像与阵营底框播报。具体见 [比赛展示说明](docs/match-presentation.md) 和 [事件说明](docs/events-notes.md)。显示策略与模拟器联调方法见 [地图联调说明](docs/map-testing.md)。
+可用 `--config config/terminal.local.json` 指定个人配置；默认读取可执行文件旁的 `config/terminal.example.json`。队名为本地显示参数，当前协议没有上报队名。桌面入口创建并管理同一个 `TerminalRuntime`，默认关闭图传。顶部包含局数、比分、阶段计时、双方基地血量（前哨站仅在地图显示），顶部信息栏采用更紧凑高度；事件侧栏收窄，分析板压缩留白，为地图保留更大空间；我方当前/累计经济、双方累计控制度/总伤害及己方科技/加密等级集中在横跨整个底部的战场分析板，控制度和伤害以红蓝水平柱对比，控制度按当前阵地占领状态显示我方相对对方的瞬时净速度（正绿负红，点/比赛秒），伤害不显示速度，科技与加密归为一组；地图以圆形车号、紧凑血条及左侧等级格显示八台地面机器人的状态，不显示机器人血量数字；并在两侧基地及两座前哨站位置显示无名称、无数字的细血条，前哨站额外叠加放大的 RM26 图标，左侧战场事件侧栏从顶部信息栏下方延伸到分析板上沿，保留最近 50 条，按时间追加并自动滚动；右侧上方地图等比例占满剩余可用空间，底部分析板提供红蓝视角切换。比赛准备/暂停、五秒倒计时、胜负结算复用 RM26 素材；地图上方的己敌激活计时、时间节点及实时事件共用切角通告框，从左往右排列，以模糊淡入、上移淡出和平滑补位过渡，倒计时刷新不重播动效；击杀播报固定覆盖在通告上层，事件栏另记录实际金币收入，击杀及前哨站摧毁复用 RM26 的头像与阵营底框播报。具体见 [比赛展示说明](docs/match-presentation.md) 和 [事件说明](docs/events-notes.md)。显示策略与模拟器联调方法见 [地图联调说明](docs/map-testing.md)。
 
 入口为 `apps/desktop/src/main.cpp`，窗口与 C++ 展示适配位于 `modules/ui/include/`、`src/`，QML 和图片位于 `modules/ui/resources/`。底图保持比例，标记跟随实际图片区域缩放。
 

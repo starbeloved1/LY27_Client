@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import LY27.Ui 1.0
 
 Item {
     id: root
@@ -46,7 +47,7 @@ Item {
         opacity: root.destroyed ? 0.7 : 1.0
     }
 
-    Text {
+    UiText {
         id: hpText
         anchors.left: root.isBlue ? undefined : bg.left
         anchors.right: root.isBlue ? bg.right : undefined
@@ -58,7 +59,7 @@ Item {
         width: Math.round(40 * root.contentScale)
         objectName: "outpostHealthValue"
         text: root.hp >= 0 ? root.hp.toString() : "—"
-        color: root.destroyed ? "#D4D7DC" : "#FFFFFF"
+        color: root.destroyed ? "#D4D7DC" : Theme.text
         font.pixelSize: Math.round(13 * root.contentScale)
         font.bold: true
         horizontalAlignment: root.isBlue ? Text.AlignRight : Text.AlignLeft
@@ -105,7 +106,7 @@ Item {
             width: parent.width * root.hpRatio
             height: Math.max(2, Math.round(2 * root.contentScale))
             radius: height / 2
-            color: root.destroyed ? "#999999" : (root.isBlue ? "#31BAFF" : "#FF2E45")
+            color: root.destroyed ? "#999999" : (root.isBlue ? Theme.teamBlue : Theme.teamRed)
             opacity: root.destroyed ? 0.6 : 0.95
         }
     }
