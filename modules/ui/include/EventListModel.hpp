@@ -16,7 +16,6 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
     // 侧栏和醒目播报共用 27 事件文案；无效参数不产生醒目提示。
-    static QVariantMap eventPresentation(int id, const QString &parameter, Team team);
 
 private:
     struct Row { QString time, text, color, parameter, timeSource; int id = 0; };

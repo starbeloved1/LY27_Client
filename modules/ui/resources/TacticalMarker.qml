@@ -9,14 +9,14 @@ Item {
     property real mapWidth: 0
     property real mapHeight: 0
     width: 1; height: 1
-    Rectangle {
+    TechPanel {
         id: badge
         objectName: "tacticalMarkerBadge"
-        width: 34; height: 34; radius: 6
+        width: 34; height: 34; cut: 6
         x: Math.max(2 - root.x, Math.min(-width / 2, root.mapWidth - root.x - width - 2))
         y: root.y >= root.lift + height / 2 + 2 ? -root.lift - height / 2 : 22
-        color: Theme.overlay
-        border.color: Theme.tactical; border.width: 2
+        fill: Theme.overlay
+        line: Theme.tactical; lineWidth: 2
         TacticalSymbol { anchors.centerIn: parent; markerType: root.markerType }
         UiText {
             visible: root.receiver.length > 0

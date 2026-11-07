@@ -56,7 +56,8 @@ if(LY27_BUILD_DESKTOP)
     add_executable(test_match_notices test_match_notices.cpp)
     target_link_libraries(test_match_notices PRIVATE ly27_ui Qt6::Test)
     add_test(NAME match_notices COMMAND test_match_notices)
-    set_tests_properties(match_notices PROPERTIES TIMEOUT 20
+    # 通告动效测试等待完整出入场及补位过程。
+    set_tests_properties(match_notices PROPERTIES TIMEOUT 35
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_executable(test_buffs test_buffs.cpp)
     target_link_libraries(test_buffs PRIVATE ly27_ui Qt6::Test)

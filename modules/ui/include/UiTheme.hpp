@@ -56,6 +56,7 @@ class UiTheme final : public QObject {
     Q_PROPERTY(int body MEMBER body CONSTANT)
     Q_PROPERTY(int heading MEMBER heading CONSTANT)
     Q_PROPERTY(int number MEMBER number CONSTANT)
+    Q_PROPERTY(int numberLarge MEMBER numberLarge CONSTANT)
     Q_PROPERTY(int padding MEMBER padding CONSTANT)
     Q_PROPERTY(int gap MEMBER gap CONSTANT)
     Q_PROPERTY(int quickMotion MEMBER quickMotion CONSTANT)
@@ -73,7 +74,7 @@ public:
     const QColor positive{ui::Positive}, danger{ui::TeamRed}, tactical{ui::Tactical};
     const QColor overlay{"#F010171F"}, ink{"#091017"};
     const QString textFont, numberFont;
-    const int caption = 11, body = 13, heading = 17, number = 28;
+    const int caption = 11, body = 13, heading = 17, number = 28, numberLarge = 36;
     const int padding = 12, gap = 8, quickMotion = 80, numericMotion = ui::NumericMotion, healthMotion = 160;
 };
 

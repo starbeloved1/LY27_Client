@@ -21,7 +21,10 @@ QString UiTheme::preferredTextFont()
 }
 QString UiTheme::preferredNumberFont()
 {
-    static const auto family = availableFont({"JetBrains Mono", "DejaVu Sans Mono", "Consolas", "Menlo"},
+    // 窄体无衬线：0 不带斜杠，相同宽度下能放更大字号，读数更像比分而不是终端日志。
+    static const auto family = availableFont({
+        "Liberation Sans Narrow", "Nimbus Sans Narrow", "Ubuntu Condensed",
+        "DejaVu Sans Condensed", "Arial Narrow", "Roboto Condensed"},
         QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
     return family;
 }

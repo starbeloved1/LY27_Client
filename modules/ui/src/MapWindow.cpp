@@ -7,6 +7,7 @@
 #include <QResource>
 #include <QPainter>
 #include <array>
+#include <cmath>
 #include <QKeyEvent>
 #include <QQuickItem>
 #include <QQuickImageProvider>
@@ -36,6 +37,13 @@ public:
             std::array<int, 256> tone{};
             for (int i = 0; i < 256; ++i)
                 tone[i] = qBound(0, qRound(((i - 128) * 1.06 + 128) * .80), 255);
+            // 径向暗角：中心不衰减、四角压暗，视线收到战场中央；周边装饰自动退后。
+            const qreal w = image.width(), h = image.height();
+            const qreal cx = w * .5, cy = h * .48;
+            const qreal maxRadius = std::hypot(w * .5, h * .5);
+            constexpr qreal inner = .42;   // 该半径内完全不衰减
+            constexpr qreal outer = .78;   // 该半径处衰减最强
+            constexpr qreal strength = .34;
             for (int y = 0; y < image.height(); ++y) {
                 auto *line = reinterpret_cast<QRgb *>(image.scanLine(y));
                 for (int x = 0; x < image.width(); ++x) {
@@ -43,7 +51,12 @@ public:
                     const int r = qRed(pixel), g = qGreen(pixel), b = qBlue(pixel);
                     const int luminance = (r * 54 + g * 183 + b * 19 + 128) >> 8;
                     const auto channel = [&](int value) { return tone[(value * 55 + luminance * 45 + 50) / 100]; };
-                    line[x] = qRgba(channel(r), channel(g), channel(b), qAlpha(pixel));
+                    // 二次缓出，边缘过渡柔和，缩略图上不出现可见的圈。
+                    const qreal distance = std::hypot(x - cx, y - cy) / maxRadius;
+                    const qreal t = qBound(0.0, (distance - inner) / (outer - inner), 1.0);
+                    const qreal falloff = 1.0 - strength * t * t;
+                    line[x] = qRgba(int(channel(r) * falloff), int(channel(g) * falloff),
+                                    int(channel(b) * falloff), qAlpha(pixel));
                 }
             }
             return image;

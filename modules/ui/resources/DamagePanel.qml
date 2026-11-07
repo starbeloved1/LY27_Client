@@ -8,12 +8,12 @@ Item {
     property var stats: ({})
     width: Math.min(360, parent.width - 24)
     height: Math.min(452, parent.height - 24)
-    Rectangle {
+    TechPanel {
         width: 360; height: 452
         scale: Math.min(root.width / width, root.height / height)
         transformOrigin: Item.TopLeft
-        color: "#ed14141f"; radius: 5
-        border.color: "#665b37"
+        cut: 8
+        fill: "#ed14141f"; line: "#665b37"
         UiText {
             x: 18; y: 15; width: 324; height: 28
             text: "伤害面板"
@@ -32,7 +32,7 @@ Item {
         }
         UiText {
             objectName: "injuryTotal"
-                        font.family: Theme.numberFont
+                        numeric: true
             x: 160; y: 83; width: 182; height: 31
             text: root.stats.totalText || "—"
             color: Theme.text; font.pixelSize: 25; font.bold: true
@@ -59,7 +59,7 @@ Item {
                     }
                     UiText {
                         objectName: "injuryValue_" + (row.key || "")
-                        font.family: Theme.numberFont
+                        numeric: true
                         x: 155; width: 94; height: parent.height
                         text: row.valueText || "—"
                         color: "#eeeeee"; font.pixelSize: 13

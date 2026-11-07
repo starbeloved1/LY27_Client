@@ -1,8 +1,8 @@
 #include "UiTheme.hpp"
 #include "MatchNotices.hpp"
-#include "EventListModel.hpp"
 
 #include <array>
+#include <cmath>
 #include <utility>
 
 namespace ly27 {
@@ -22,8 +22,10 @@ bool sameEpoch(const StateSource &a, const StateSource &b)
 MatchNotices::MatchNotices(const StateStore &store, Team team, QObject *parent)
     : QObject(parent), m_store(store), m_team(team)
 {
-    m_eventTimer.setSingleShot(true);
-    connect(&m_eventTimer, &QTimer::timeout, this, &MatchNotices::clearEvent);
+    m_runeTimer.setSingleShot(true);
+    m_dartTimer.setSingleShot(true);
+    connect(&m_runeTimer, &QTimer::timeout, this, [this] { m_rune.clear(); emit resultsChanged(); });
+    connect(&m_dartTimer, &QTimer::timeout, this, [this] { m_dart.clear(); emit resultsChanged(); });
     connect(&store, &StateStore::changed, this, &MatchNotices::observe);
     refresh();
 }
@@ -32,11 +34,29 @@ void MatchNotices::setTimed(QVariantList value)
     if (m_timed == value) return;
     m_timed = std::move(value); emit timedChanged();
 }
-void MatchNotices::clearEvent()
+QVariantList MatchNotices::results() const
 {
-    m_eventTimer.stop();
-    if (m_event.isEmpty()) return;
-    m_event.clear(); emit eventChanged();
+    QVariantList result;
+    if (!m_rune.isEmpty()) result.append(m_rune);
+    if (!m_dart.isEmpty()) result.append(m_dart);
+    return result;
+}
+void MatchNotices::clearResults()
+{
+    m_runeTimer.stop(); m_dartTimer.stop();
+    if (m_rune.isEmpty() && m_dart.isEmpty()) return;
+    m_rune.clear(); m_dart.clear(); emit resultsChanged();
+}
+void MatchNotices::showResult(QVariantMap value, bool rune)
+{
+    auto &current = rune ? m_rune : m_dart;
+    if (current.value("text") == value.value("text") && current.value("detail") == value.value("detail")) return;
+    // 同一能量结果补齐统计时原地更新，不将完成事件当作持续进度重播。
+    const bool enrichment = rune && !current.isEmpty() && current.value("text") == value.value("text");
+    value.insert("token", enrichment ? current.value("token") : QVariant::fromValue(++m_sequence));
+    current = std::move(value);
+    (rune ? m_runeTimer : m_dartTimer).start(rune ? 6000 : 5000);
+    emit resultsChanged();
 }
 void MatchNotices::refresh()
 {
@@ -47,11 +67,11 @@ void MatchNotices::refresh()
     const auto &s = e.received && (!g.received || e.connection > g.connection) ? e : g;
     const QString epoch = s.received ? QStringLiteral("%1/%2/%3").arg(s.sessionId).arg(s.connection).arg(s.roundRevision) : QString{};
     if (m_epoch != epoch) {
-        m_epoch = epoch; m_crossed.clear(); m_active.clear(); m_previousElapsed.reset(); clearEvent();
+        m_epoch = epoch; m_crossed.clear(); m_active.clear(); m_previousElapsed.reset(); clearResults();
     }
     if (!game.stage.isFresh() || *game.stage.value != GameStage::Battle ||
         !game.paused.isFresh() || *game.paused.value) {
-        setTimed({}); clearEvent(); m_previousElapsed.reset(); m_active.clear();
+        setTimed({}); clearResults(); m_previousElapsed.reset(); m_active.clear();
         if (game.stage.isFresh() && int(*game.stage.value) < int(GameStage::Battle)) m_crossed.clear();
         return;
     }
@@ -79,13 +99,14 @@ void MatchNotices::refresh()
         }
         if (elapsed > node.elapsed + 3) m_active.remove(node.elapsed);
         const int left = node.elapsed - elapsed;
-        const bool upcoming = left > 0 && left <= 5 && !m_crossed.contains(node.elapsed);
-        if (!upcoming && !m_active.contains(node.elapsed)) continue;
+        // 机关/闸门仅在节点到达后提示可用，提前倒计时只保留比赛最后五秒。
+        const bool ending = node.elapsed == 420 && left > 0 && left <= 5;
+        if (!ending && !m_active.contains(node.elapsed)) continue;
         if (node.elapsed == 420 && left <= 0) continue;
         const QString target = QString::fromUtf8(node.text);
+        const QString action = node.elapsed == 30 || node.elapsed == 240 ? QStringLiteral("可开启") : QStringLiteral("可激活");
         const QString text = node.elapsed == 420 ? QStringLiteral("本局比赛剩余 %1 秒").arg(left)
-            : upcoming ? QStringLiteral("%1 秒后新增 1 次%2机会").arg(left).arg(target)
-            : QStringLiteral("新增 1 次%1机会").arg(target);
+            : action + target;
         timed.append(QVariantMap{{"id", node.elapsed + 1}, {"text", text}, {"seconds", qMax(0, left)}});
     }
     m_previousElapsed = elapsed; m_clockSource = clock;
@@ -102,16 +123,40 @@ void MatchNotices::observe(const QString &topic)
         !game.paused.isFresh() || *game.paused.value || !sameEpoch(s, game.stage.source) ||
         s.validity != StateValidity::Observed || s.retained || !event.id.value) return;
     const int id = *event.id.value;
-    // 参数为空的官方事件允许省略 param；其余事件必须通过共用文案校验。
-    if ((id == 3 || id == 4 || (id >= 5 && id <= 9) || id == 15) && !event.parameter.value) return;
-    auto notice = EventListModel::eventPresentation(id, event.parameter.value.value_or(QString{}), m_team);
-    if (notice.isEmpty()) return;
-    // 连续相同事件不重启动画/延长遮挡，能量进度不抢占仍在显示的危险警告。
-    if ((!m_event.isEmpty() && m_event.value("text") == notice.value("text")) ||
-        (id == 3 && m_event.value("accent") == QString::fromLatin1(ui::TeamRed))) return;
-    notice.insert("token", ++m_sequence);
-    m_event = std::move(notice);
-    m_eventTimer.start(5000); emit eventChanged();
+    if ((id != 3 && id != 4 && id != 9) || !event.parameter.value) return;
+    QString parameter = event.parameter.value->trimmed();
+    parameter.replace(QStringLiteral("，"), QStringLiteral(","));
+    const auto parts = parameter.split(',');
+    // 用户确认能量机关完成事件只发送己方结果，统一作为己方收益展示。
+    QVariantMap notice{{"id", id}, {"kind", id == 9 ? "dart" : "rune"}, {"accent", ui::Positive}};
+    if (id == 3) {
+        if (parts.size() != 2) return;
+        bool armsOk = false, ringsOk = false;
+        const int arms = parts[0].trimmed().toInt(&armsOk);
+        const double rings = parts[1].trimmed().toDouble(&ringsOk);
+        if (!armsOk || !ringsOk || arms < 0 || !std::isfinite(rings) || rings < 0) return;
+        notice.insert("text", QStringLiteral("大能量机关已激活"));
+        notice.insert("detail", QStringLiteral("成功灯臂 %1 · 平均环数 %2").arg(arms).arg(rings, 0, 'f', 1));
+        notice.insert("arms", arms); notice.insert("rings", rings);
+    } else if (id == 4) {
+        bool ok = false; const int type = parameter.toInt(&ok);
+        if (!ok || (type != 1 && type != 2)) return;
+        // 3/4 的到达顺序不固定，类型通知不覆盖仍在展示的大能量结果统计。
+        if (type == 2 && m_rune.contains("arms")) return;
+        notice.insert("text", type == 1 ? QStringLiteral("小能量机关已激活") : QStringLiteral("大能量机关已激活"));
+    } else {
+        if (parts.size() != 2) return;
+        bool teamOk = false, targetOk = false;
+        const int team = parts[0].trimmed().toInt(&teamOk), target = parts[1].trimmed().toInt(&targetOk);
+        const QStringList targets{QStringLiteral("前哨站"), QStringLiteral("基地固定目标"), QStringLiteral("基地随机固定目标"),
+            QStringLiteral("基地随机移动目标"), QStringLiteral("基地末端移动目标")};
+        if (!teamOk || !targetOk || (team != 1 && team != 2) || target < 1 || target > targets.size()) return;
+        const bool ally = (team == 1) == (m_team == Team::Red);
+        notice.insert("accent", ally ? ui::Positive : ui::TeamRed);
+        notice.insert("text", ally ? QStringLiteral("己方飞镖命中") : QStringLiteral("敌方飞镖命中"));
+        notice.insert("detail", targets[target - 1]); notice.insert("target", target); notice.insert("team", team);
+    }
+    showResult(std::move(notice), id != 9);
 }
 
 }

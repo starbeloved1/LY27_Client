@@ -8,7 +8,7 @@ Item {
     property bool animationsAllowed: true
     property string epoch: ""
     readonly property var timed: controller ? controller.timed : []
-    readonly property var event: controller ? controller.event : ({})
+    readonly property var results: controller ? controller.results : []
     readonly property bool compact: parent.height < 180
     height: cards.height
     visible: cards.layoutKeys.length > 0
@@ -17,7 +17,7 @@ Item {
         width: parent.width
         notices: root.mechanisms
         timed: root.timed
-        event: root.event
+        results: root.results
         compact: root.compact
         animationsAllowed: root.animationsAllowed
         epoch: root.epoch

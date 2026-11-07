@@ -1,4 +1,5 @@
 #include "MapWindow.hpp"
+#include "UiTheme.hpp"
 #include "TerminalViewModel.hpp"
 #include "rm2027.pb.h"
 
@@ -69,23 +70,25 @@ private slots:
             QVERIFY(s.model.notices()->timed().first().toMap()["text"].toString().contains("小能量"));
             for (int elapsed : {30, 90, 180, 240, 255, 330}) {
                 QVERIFY(s.send(s.clock(elapsed - 5)));
-                const auto preview = s.model.notices()->timed(); QCOMPARE(preview.size(), 1);
-                QCOMPARE(preview.first().toMap()["seconds"].toInt(), 5);
-                QVERIFY(preview.first().toMap()["text"].toString().contains("新增 1 次"));
-                QVERIFY(s.send(s.clock(elapsed - 1))); QVERIFY(s.send(s.clock(elapsed)));
+                QVERIFY(s.model.notices()->timed().isEmpty());
+                QVERIFY(s.send(s.clock(elapsed - 1))); QVERIFY(s.model.notices()->timed().isEmpty());
+                QVERIFY(s.send(s.clock(elapsed)));
                 QCOMPARE(s.model.notices()->timed().size(), 1);
                 QCOMPARE(s.model.notices()->timed().first().toMap()["seconds"].toInt(), 0);
+                const auto text = s.model.notices()->timed().first().toMap()["text"].toString();
+                QVERIFY(text.startsWith(elapsed == 30 || elapsed == 240 ? "可开启飞镖闸门" : "可激活"));
+                QVERIFY(!text.contains("秒后"));
                 QVERIFY(s.send(s.clock(elapsed + 4))); QVERIFY(s.model.notices()->timed().isEmpty());
             }
             QVERIFY(s.send(s.clock(415))); QVERIFY(s.model.notices()->timed().first().toMap()["text"].toString().contains("剩余 5 秒"));
             // 同一局回拨不会再次宣告已发放机会。
             QVERIFY(s.send(s.clock(89))); QVERIFY(s.model.notices()->timed().isEmpty());
             QVERIFY(s.send(s.clock(90))); QVERIFY(s.model.notices()->timed().isEmpty());
-            // 新局解除去重，中途接入只预告未来，不补播刚过去的节点。
+            // 新局解除去重，中途接入不补播过去节点，也不提前展示倒计时。
             QVERIFY(s.send(s.clock(90, 2))); QVERIFY(s.model.notices()->timed().isEmpty());
-            QVERIFY(s.send(s.clock(175, 2))); QVERIFY(!s.model.notices()->timed().isEmpty());
+            QVERIFY(s.send(s.clock(175, 2))); QVERIFY(s.model.notices()->timed().isEmpty());
             QVERIFY(s.send(s.clock(176, 2, true))); QVERIFY(s.model.notices()->timed().isEmpty());
-            QVERIFY(s.send(s.clock(177, 2))); QVERIFY(!s.model.notices()->timed().isEmpty());
+            QVERIFY(s.send(s.clock(177, 2))); QVERIFY(s.model.notices()->timed().isEmpty());
             s.store.setConnected(false); QVERIFY(s.model.notices()->timed().isEmpty());
             s.store.setConnected(true); QVERIFY(s.send(s.clock(180, 2))); QVERIFY(s.model.notices()->timed().isEmpty());
             QVERIFY(s.send(s.clock(239, 2))); s.now += 4000000000LL;
@@ -97,49 +100,69 @@ private slots:
             QVERIFY(s.send(s.clock(255, 2), true)); QVERIFY(s.model.notices()->timed().isEmpty());
         }
     }
-    void currentProtocolEventsAndLifecycle()
+    void dedicatedResultsAndLifecycle()
     {
         for (bool commander : {false, true}) for (bool blue : {false, true}) {
             Scene s(commander, blue); QVERIFY(s.send(s.clock(40)));
-            const QList<QPair<int, const char *>> events{{3,"10,9.6"}, {4,"2"}, {5,"2"}, {6,"4"}, {7,"1"}, {8,"2"},
-                {9,"1,5"}, {10,nullptr}, {11,nullptr}, {12,nullptr}, {13,nullptr}, {14,nullptr}, {15,"0"}, {16,nullptr}};
-            for (const auto &event : events) {
-                QVERIFY(s.event(event.first, event.second));
-                const auto current = s.model.notices()->event(); QCOMPARE(current["id"].toInt(), event.first);
-                QVERIFY(!current["text"].toString().startsWith("事件 #"));
-                QVERIFY(s.event(event.first, event.second)); QCOMPARE(s.model.notices()->event(), current);
+            // 通用实时事件被移除，但左栏历史继续记录。
+            for (int id : {5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16}) {
+                QVERIFY(s.event(id, "1")); QVERIFY(s.model.notices()->results().isEmpty());
             }
-            QVERIFY(s.event(14)); QVERIFY(s.model.notices()->event()["text"].toString().contains("重装战亡"));
-            QVERIFY(!s.model.notices()->event()["text"].toString().contains("请求四级"));
-            const auto before = s.model.notices()->event();
-            QVERIFY(s.event(15, "99")); QCOMPARE(s.model.notices()->event(), before);
-            QVERIFY(s.event(4)); QCOMPARE(s.model.notices()->event(), before);
-            QVERIFY(s.event(9, "3,0")); QCOMPARE(s.model.notices()->event(), before);
-            QVERIFY(s.event(17)); QCOMPARE(s.model.notices()->event(), before);
-            QVERIFY(s.event(10, nullptr, true)); QCOMPARE(s.model.notices()->event(), before);
-            // 击杀和摧毁沿用原有图形播报，不重复占用本提示卡。
-            QVERIFY(s.event(1, "103,3")); QCOMPARE(s.model.notices()->event(), before);
-            QVERIFY(s.event(2, "111")); QCOMPARE(s.model.notices()->event(), before);
-            QVERIFY(s.send(s.clock(41, 1, true))); QVERIFY(s.model.notices()->event().isEmpty());
-            QVERIFY(s.event(11)); QVERIFY(s.model.notices()->event().isEmpty());
-            QVERIFY(s.send(s.clock(42))); QVERIFY(s.event(10));
-            s.store.setConnected(false); QVERIFY(s.model.notices()->event().isEmpty());
-            s.store.setConnected(true); QVERIFY(s.send(s.clock(43))); QVERIFY(s.model.notices()->event().isEmpty());
-            QVERIFY(s.event(11)); QVERIFY(s.send(s.clock(0, 2))); QVERIFY(s.model.notices()->event().isEmpty());
-            QVERIFY(s.event(11)); s.now += 3100000000LL; s.store.refresh();
-            s.model.refresh(); QVERIFY(s.model.notices()->event().isEmpty());
+            QVERIFY(s.model.events()->rowCount() > 0);
+            QVERIFY(s.event(4, "2"));
+            auto rune = s.model.notices()->results().first().toMap();
+            QCOMPARE(rune["text"].toString(), QString("大能量机关已激活"));
+            QCOMPARE(rune["accent"].toString(), QString(ly27::ui::Positive));
+            QVERIFY(rune["detail"].toString().isEmpty());
+            const auto token = rune["token"];
+            QVERIFY(s.event(3, "10,9.6")); rune = s.model.notices()->results().first().toMap();
+            QCOMPARE(rune["token"], token); QCOMPARE(rune["arms"].toInt(), 10);
+            QCOMPARE(rune["rings"].toDouble(), 9.6);
+            QVERIFY(rune["detail"].toString().contains("平均环数 9.6"));
+            QVERIFY(s.event(4, "2")); QCOMPARE(s.model.notices()->results().first().toMap(), rune);
+            QVERIFY(s.event(3, "10,9.6")); QCOMPARE(s.model.notices()->results().first().toMap(), rune);
+            for (int team : {1, 2}) for (int target = 1; target <= 5; ++target) {
+                const auto param = QString("%1,%2").arg(team).arg(target).toUtf8();
+                QVERIFY(s.event(9, param.constData()));
+                const auto results = s.model.notices()->results(); QCOMPARE(results.size(), 2);
+                QCOMPARE(results.first().toMap(), rune);
+                const auto dart = results.last().toMap();
+                const bool ally = (team == 2) == blue;
+                QCOMPARE(dart["accent"].toString(), QString(ally ? ly27::ui::Positive : ly27::ui::TeamRed));
+                QCOMPARE(dart["target"].toInt(), target);
+                QVERIFY(s.event(9, param.constData())); QCOMPARE(s.model.notices()->results(), results);
+            }
+            const auto before = s.model.notices()->results();
+            for (const auto &invalid : QList<QPair<int, const char *>>{{3,"-1,5"},{3,"2,nan"},{4,"3"},{4,nullptr},{9,"3,1"},{9,"1,6"}}) {
+                QVERIFY(s.event(invalid.first, invalid.second)); QCOMPARE(s.model.notices()->results(), before);
+            }
+            QVERIFY(s.event(9, "1,1", true)); QCOMPARE(s.model.notices()->results(), before);
+            QVERIFY(s.event(1, "103,3")); QCOMPARE(s.model.notices()->results(), before);
+            QVERIFY(s.event(2, "111")); QCOMPARE(s.model.notices()->results(), before);
+            QVERIFY(s.send(s.clock(41, 1, true))); QVERIFY(s.model.notices()->results().isEmpty());
+            QVERIFY(s.event(4, "1")); QVERIFY(s.model.notices()->results().isEmpty());
+            QVERIFY(s.send(s.clock(42))); QVERIFY(s.event(4, "1"));
+            QCOMPARE(s.model.notices()->results().first().toMap()["text"].toString(), QString("小能量机关已激活"));
+            s.store.setConnected(false); QVERIFY(s.model.notices()->results().isEmpty());
+            s.store.setConnected(true); QVERIFY(s.send(s.clock(43))); QVERIFY(s.model.notices()->results().isEmpty());
+            // 状态快照不能触发完成播报；平均环数只在正在激活时有效。
+            ly27::wire::RuneStatusSync status; status.set_rune_status(3); status.set_average_rings(0);
+            QVERIFY(s.send(status)); QVERIFY(s.model.notices()->results().isEmpty());
+            QVERIFY(s.event(3, "10,9.6")); QVERIFY(s.send(s.clock(0, 2))); QVERIFY(s.model.notices()->results().isEmpty());
+            QVERIFY(s.event(9, "1,1")); s.now += 3100000000LL; s.store.refresh();
+            s.model.refresh(); QVERIFY(s.model.notices()->results().isEmpty());
         }
     }
     void actualViewsAndExpiry()
     {
-        Scene s; QVERIFY(s.send(s.clock(25))); QVERIFY(s.event(10));
+        Scene s; QVERIFY(s.send(s.clock(29))); QVERIFY(s.send(s.clock(30))); QVERIFY(s.event(9, "1,5"));
         ly27::wire::Buff b; b.set_robot_id(3); b.set_buff_type(2); b.set_buff_level(25); b.set_buff_left_time(20);
         QVERIFY(s.send(b));
         ly27::MapWindow window(&s.model); window.show(); QCOMPARE(window.status(), QQuickView::Ready);
         auto *root = window.rootObject();
         for (auto size : {QSize(1280,800), QSize(640,480)}) {
             window.resize(size); QTest::qWait(30); QVERIFY(settleNotices(root));
-            auto *timed = item(root,"timedMatchNotice"); auto *event = item(root,"liveMatchNotice");
+            auto *timed = item(root,"timedMatchNotice"); auto *event = item(root,"dartResultNotice");
             auto *buffs = item(root,"selfBuffPanel"); auto *map = item(root,"mapArea");
             QVERIFY(timed && timed->isVisible()); QVERIFY(event && event->isVisible()); QVERIFY(buffs && buffs->isVisible());
             const QRectF area(QPointF(), map->size());
@@ -155,12 +178,12 @@ private slots:
             QDir().mkpath("test-artifacts");
             QVERIFY(window.grabWindow().save(QString("test-artifacts/match-notices-%1.png").arg(size.width())));
         }
-        QTRY_VERIFY_WITH_TIMEOUT(s.model.notices()->event().isEmpty(), 5500);
-        QVERIFY(s.send(s.clock(100))); QVERIFY(s.event(11));
-        QTRY_VERIFY_WITH_TIMEOUT(item(root, "liveMatchNotice")->opacity() > .9, 1500);
+        QTRY_VERIFY_WITH_TIMEOUT(s.model.notices()->results().isEmpty(), 5500);
+        QVERIFY(s.send(s.clock(100))); QVERIFY(s.event(9, "2,1"));
+        QTRY_VERIFY_WITH_TIMEOUT(item(root, "dartResultNotice")->opacity() > .9, 1500);
         QVERIFY(!item(root, "selfBuffPanel")->mapRectToItem(root, QRectF(QPointF(), item(root, "selfBuffPanel")->size()))
-            .intersects(item(root, "liveMatchNotice")->mapRectToItem(root, QRectF(QPointF(), item(root, "liveMatchNotice")->size()))));
-        QVERIFY(item(root, "liveMatchNotice")->isVisible());
+            .intersects(item(root, "dartResultNotice")->mapRectToItem(root, QRectF(QPointF(), item(root, "dartResultNotice")->size()))));
+        QVERIFY(item(root, "dartResultNotice")->isVisible());
         window.setSource(QUrl());
     }
     void cardsEnterLeaveAndSlideWithoutRestartingOnTicks()
@@ -230,7 +253,7 @@ private slots:
     void unifiedCardsFlowAndKillStaysAboveThem()
     {
         for (bool commander : {false, true}) {
-            Scene s(commander); QVERIFY(s.send(s.clock(25))); QVERIFY(s.event(10));
+            Scene s(commander); QVERIFY(s.send(s.clock(29))); QVERIFY(s.send(s.clock(30))); QVERIFY(s.event(9, "1,5")); QVERIFY(s.event(3, "10,9.6"));
             ly27::MapWindow window(&s.model); window.show();
             QCOMPARE(window.status(), QQuickView::Ready);
             auto *root = window.rootObject();
@@ -242,7 +265,7 @@ private slots:
                 mechanisms.add_mechanism_id(3); mechanisms.add_mechanism_time_sec(4);
                 mechanisms.add_mechanism_id(4); mechanisms.add_mechanism_time_sec(-2);
                 QVERIFY(s.send(mechanisms)); QTest::qWait(30); QVERIFY(settleNotices(root));
-                const QStringList names{"mechanismNotice4", "mechanismNotice3", "timedMatchNotice", "liveMatchNotice"};
+                const QStringList names{"mechanismNotice4", "mechanismNotice3", "timedMatchNotice", "runeResultNotice", "dartResultNotice"};
                 auto *viewport = item(root, "mechanismNotices"); QVERIFY(viewport);
                 QList<QRectF> bounds;
                 QSizeF cardSize;

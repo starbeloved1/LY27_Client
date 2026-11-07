@@ -6,7 +6,7 @@ Flickable {
     objectName: "mechanismNotices"
     property var notices: []
     property var timed: []
-    property var event: ({})
+    property var results: []
     property bool compact: false
     property real maximumHeight: parent.height
     property bool animationsAllowed: true
@@ -41,19 +41,22 @@ Flickable {
         notices.forEach(function(notice) {
             result.push({ key: "mechanism" + notice.id, identity: "mechanism" + notice.id,
                 objectName: "mechanismNotice" + notice.id, heading: notice.target,
-                eyebrow: notice.enemy ? "敌方推进" : "己方推进", accent: notice.accent,
+                accent: notice.accent,
                 message: notice.actor + "还有 " + notice.seconds + " 秒", detail: "激活" + notice.target,
                 messageObjectName: "mechanismMessage" })
         })
         timed.forEach(function(notice, index) {
             result.push({ key: "timed" + notice.id, identity: "timed" + notice.id,
                 objectName: index === 0 ? "timedMatchNotice" : "timedMatchNotice" + index,
-                heading: "时间节点", eyebrow: notice.seconds > 0 ? "即将到达" : "机会发放",
+                heading: "战术提示",
                 message: notice.text, accent: Theme.secondary })
         })
-        if (event.text !== undefined) result.push({ key: "event", identity: "event" + event.token,
-            objectName: "liveMatchNotice", heading: "战场通告", eyebrow: "实时事件",
-            message: event.text, accent: event.accent })
+        results.forEach(function(notice) {
+            result.push({ key: notice.kind, identity: notice.kind + notice.token,
+                objectName: notice.kind + "ResultNotice", kind: notice.kind,
+                heading: notice.kind === "rune" ? "能量机关激活" : "飞镖命中",
+                message: notice.text, detail: notice.detail, accent: notice.accent })
+        })
         return result
     }
     function reconcile() {
@@ -75,7 +78,7 @@ Flickable {
     }
     onNoticesChanged: schedule()
     onTimedChanged: schedule()
-    onEventChanged: schedule()
+    onResultsChanged: schedule()
     onCardWidthChanged: schedule()
     onCardHeightChanged: schedule()
     onColumnsChanged: schedule()
@@ -85,7 +88,7 @@ Flickable {
         const values = []
         for (let index = 0; index < mechanisms.count; ++index) values.push(mechanisms.itemAt(index))
         for (let index = 0; index < timeNodes.count; ++index) values.push(timeNodes.itemAt(index))
-        values.push(eventCard)
+        for (let index = 0; index < resultCards.count; ++index) values.push(resultCards.itemAt(index))
         slots = values; ready = true; reconcile()
     }
     Rectangle {
@@ -119,12 +122,16 @@ Flickable {
             onReleased: root.schedule()
         }
     }
-    AnimatedNotice {
-        id: eventCard
-        slotKey: "event"
-        width: root.cardWidth
-        compact: root.compact
-        motionAllowed: root.animationsAllowed
-        onReleased: root.schedule()
+    Repeater {
+        id: resultCards
+        model: ["rune", "dart"]
+        delegate: AnimatedNotice {
+            required property string modelData
+            slotKey: modelData
+            width: root.cardWidth
+            compact: root.compact
+            motionAllowed: root.animationsAllowed
+            onReleased: root.schedule()
+        }
     }
 }

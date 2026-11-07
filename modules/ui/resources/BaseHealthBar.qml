@@ -183,7 +183,7 @@ Item {
         objectName: "baseHealthValue"
         text: root.currentHealth >= 0 ? root.currentHealth.toString() : "—"
         color: root.currentHealth >= 0 ? Theme.text : Theme.unknown
-        font.family: Theme.numberFont
+        numeric: true
         font.pixelSize: root.healthFontSize
         font.bold: true
         style: Text.Outline

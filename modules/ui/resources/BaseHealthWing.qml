@@ -37,7 +37,7 @@ Item {
         currentHealth: root.hp
         isBlue: root.blue
         healthTextInset: root.logoSize * 0.62
-        healthFontSize: root.compact ? 20 : 24
+        healthFontSize: root.compact ? 21 : 27
     }
     Image {
         id: logo

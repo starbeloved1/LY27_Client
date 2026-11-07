@@ -164,14 +164,15 @@ Rectangle {
                 z: 20
             }
         }
-        Rectangle {
+        TechPanel {
             anchors.bottom: parent.bottom
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottomMargin: 6
             width: Math.min(parent.width - 12, hint.implicitWidth + 24)
-            height: 26; radius: 3; z: 21
+            height: 26; cut: 3; z: 21
             visible: root.tactics ? root.tactics.commander || root.tactics.feedback.length > 0 : false
-            color: Theme.overlay
+            fill: Theme.overlay
+            line: Theme.divider
             UiText {
                 id: hint
                 anchors.fill: parent; anchors.margins: 4
@@ -180,7 +181,7 @@ Rectangle {
                 horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
             }
         }
-        Rectangle {
+        TechPanel {
             id: selfBuffPanel
             objectName: "selfBuffPanel"
             readonly property bool compact: mapArea.height < 180
@@ -190,7 +191,8 @@ Rectangle {
             y: compact ? 6 : parent.height - height - 8
             width: compact ? selfBuffs.width + 12 : Math.max(134, selfBuffs.width + 20)
             height: compact ? 24 : 48
-            color: Theme.overlay; border.color: Theme.border; radius: 3; z: 20
+            cut: 3; z: 20
+            fill: Theme.overlay; line: Theme.border
             UiText {
                 x: 10; y: 5
                 visible: !selfBuffPanel.compact
@@ -201,7 +203,7 @@ Rectangle {
                 objectName: "selfBuffRow"
                 x: selfBuffPanel.compact ? 6 : 10
                 y: selfBuffPanel.compact ? 5 : 25
-                buffs: parent.buffs
+                buffs: selfBuffPanel.buffs
                 tooltipAbove: !selfBuffPanel.compact
             }
         }
@@ -252,8 +254,6 @@ Rectangle {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         match: root.viewModel ? root.viewModel.match : ({})
-        blueView: root.blueView
-        onSwitchViewRequested: if (root.viewModel) root.viewModel.blueView = !root.blueView
     }
     MatchPhaseOverlay {
         anchors.fill: parent

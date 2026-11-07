@@ -313,7 +313,7 @@ private slots:
         ly27::wire::GlobalSpecialMechanism m;
         m.add_mechanism_id(3); m.add_mechanism_time_sec(5); QVERIFY(s.send(m));
         QPointer<QQuickItem> card = s.get("mechanismNotice3");
-        QVERIFY(card && card->isVisible());
+        QTRY_VERIFY(card && card->isVisible());
         // 无关状态刷新、重复包和秒数变化都不能销毁面板及其 Canvas。
         ly27::wire::GlobalUnitStatus u;
         for (int n = 0; n < 20; ++n) {
@@ -334,14 +334,15 @@ private slots:
         // 排序、新增和移除提示只更新现有槽位，不重建控件。
         m.add_mechanism_id(4); m.add_mechanism_time_sec(-2); QVERIFY(s.send(m));
         QPointer<QQuickItem> second = s.get("mechanismNotice4"); QVERIFY(second);
+        QTRY_VERIFY(second->isVisible());
         m.set_mechanism_time_sec(0, 5); QVERIFY(s.send(m));
         QTest::qWait(20); QVERIFY(card && second);
         QVERIFY(s.get("mechanismNotice4")->isVisible());
         m.Clear(); QVERIFY(s.send(m));
         QTest::qWait(20); QVERIFY(card && second);
-        QVERIFY(!s.get("mechanismNotices")->isVisible());
+        QTRY_VERIFY(!s.get("mechanismNotices")->isVisible());
         m.add_mechanism_id(3); m.add_mechanism_time_sec(3); QVERIFY(s.send(m));
-        QVERIFY(s.get("mechanismNotice3")->isVisible());
+        QTRY_VERIFY(s.get("mechanismNotice3")->isVisible());
         QVERIFY(card && second);
         QVERIFY(s.screenshot("mechanisms-stable-update"));
     }

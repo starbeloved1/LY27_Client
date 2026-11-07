@@ -5,7 +5,6 @@ import LY27.Ui 1.0
 Item {
     id: root
     property string heading: ""
-    property string eyebrow: ""
     property string message: ""
     property string detail: ""
     property string messageObjectName: ""
@@ -23,17 +22,9 @@ Item {
         color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, .10)
     }
     UiText {
-        x: 16; y: 3; width: parent.width - 108; height: root.compact ? 14 : 18
+        x: 16; y: 3; width: parent.width - 32; height: root.compact ? 14 : 18
         text: root.heading
         color: Theme.text; font.pixelSize: root.compact ? 9 : 11; font.bold: true
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
-    }
-    UiText {
-        x: parent.width - 88; y: 3; width: 76; height: root.compact ? 14 : 18
-        text: root.eyebrow
-        color: root.accent; font.pixelSize: root.compact ? 8 : 9
-        horizontalAlignment: Text.AlignRight
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }

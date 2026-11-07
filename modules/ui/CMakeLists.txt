@@ -40,6 +40,7 @@ qt_add_resources(ly27_ui ly27_ui_resources
         resources/UiText.qml
         resources/BattleAnnouncement.qml
         resources/BattleNoticeCard.qml
+        resources/EventResultPanel.qml
         resources/AnimatedNotice.qml
         resources/BuffRow.qml
         resources/MatchNotices.qml
@@ -56,6 +57,7 @@ qt_add_resources(ly27_ui ly27_ui_resources
         resources/MatchResources.qml
         resources/MetricComparison.qml
         resources/HudPanel.qml
+        resources/TechPanel.qml
         resources/MechanismNotices.qml
         resources/MatchPhaseOverlay.qml
         ${ly27_phase_images}

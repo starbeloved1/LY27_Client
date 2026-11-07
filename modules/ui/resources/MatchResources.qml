@@ -20,12 +20,13 @@ Item {
         metric: "Damage"; title: "累计总伤害"
         redValue: root.match.redDamage ?? -1; blueValue: root.match.blueDamage ?? -1
     }
-    Rectangle {
+    TechPanel {
         id: logistics
         x: root.compact ? 12 : root.width - width - 12
         y: root.compact ? root.height - height : 0
         width: root.logisticsWidth; height: root.compact ? 64 : root.height
-        color: Theme.raised; radius: 4
+        cut: 4
+        fill: Theme.raised
         readonly property real economyWidth: root.compact ? width * .62 : width * .66
         Rectangle { x: logistics.economyWidth; y: 12; width: 1; height: parent.height - 24; color: Theme.divider }
         Item {
@@ -43,7 +44,7 @@ Item {
                     UiText {
                         objectName: modelData.name + "Label"
                         x: 12; y: 8; width: parent.width - 20; height: 18
-                        text: modelData.label; color: Theme.secondary; font.pixelSize: root.compact ? Theme.caption : Theme.body
+                        text: modelData.label; color: Theme.secondary; font.pixelSize: Theme.caption
                         fontSizeMode: Text.Fit; minimumPixelSize: 9
                     }
                     UiText {
@@ -51,7 +52,8 @@ Item {
                         x: 12; y: root.compact ? 28 : 34; width: parent.width - 20; height: root.compact ? 27 : 36
                         text: hasValue ? String(modelData.value) : "—"
                         color: hasValue ? Theme.text : Theme.unknown
-                        font.family: Theme.numberFont; font.pixelSize: Theme.number; font.bold: true
+                        numeric: true; font.pixelSize: root.compact ? 26 : 30
+                        font.bold: true; font.letterSpacing: -.6
                         fontSizeMode: Text.Fit; minimumPixelSize: 10
                     }
                 }
@@ -82,7 +84,7 @@ Item {
                         x: parent.width - 28; width: 26; height: parent.height
                         text: modelData.value >= 0 ? String(modelData.value) : "—"
                         color: modelData.value >= 0 ? Theme.text : Theme.unknown
-                        font.family: Theme.numberFont; font.pixelSize: Theme.heading; font.bold: true
+                        numeric: true; font.pixelSize: Theme.heading; font.bold: true
                         horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
                     }
                 }

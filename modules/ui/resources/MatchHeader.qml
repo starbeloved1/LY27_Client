@@ -13,9 +13,10 @@ Rectangle {
     color: Theme.background
 
     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.divider }
-    Rectangle {
+    TechPanel {
         anchors.fill: parent; anchors.margins: 4
-        color: Theme.panel; border.color: Theme.divider; radius: 4
+        cut: 6
+        fill: Theme.panel; line: Theme.divider
     }
     // 宽屏整体按同一比例缩放，队徽、侧翼和中间面板保持原来的衔接关系。
     Item {
@@ -56,16 +57,16 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: root.match.redScore >= 0 ? Theme.teamRed : Theme.unknown
-                    font.family: Theme.numberFont; font.pixelSize: 30; font.bold: true
+                    numeric: true; font.pixelSize: 36; font.bold: true; font.letterSpacing: -.5
                 }
                 UiText {
                     objectName: "matchTimer"
-                    x: 145; y: 45; width: 124; height: 42
+                    x: 145; y: 43; width: 124; height: 46
                     text: root.match.timer || "--:--"
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: root.match.paused ? Theme.tactical : Theme.text
-                    font.pixelSize: 32; font.family: Theme.numberFont; font.bold: true
+                    numeric: true; font.pixelSize: 38; font.bold: true; font.letterSpacing: -.5
                 }
                 UiText {
                     objectName: "matchBlueScore"
@@ -74,7 +75,7 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: root.match.blueScore >= 0 ? Theme.teamBlue : Theme.unknown
-                    font.family: Theme.numberFont; font.pixelSize: 30; font.bold: true
+                    numeric: true; font.pixelSize: 36; font.bold: true; font.letterSpacing: -.5
                 }
             }
         }

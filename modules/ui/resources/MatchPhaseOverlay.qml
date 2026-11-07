@@ -122,12 +122,13 @@ Item {
                 color: "#a9bdcb"; font.pixelSize: 16
                 horizontalAlignment: Text.AlignHCenter
             }
-            Rectangle {
+            TechPanel {
                 objectName: "dismissMatchResult"
                 width: 150; height: 34
                 anchors.horizontalCenter: parent.horizontalCenter
-                color: resultMouse.containsMouse ? "#304655" : "#1c2b36"
-                border.color: "#526979"; radius: 3
+                cut: 4
+                fill: resultMouse.containsMouse ? "#304655" : "#1c2b36"
+                line: "#526979"
                 UiText { anchors.centerIn: parent; text: "收起战报"; color: "#e4edf3"; font.pixelSize: 13 }
                 MouseArea {
                     id: resultMouse

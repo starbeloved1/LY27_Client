@@ -61,7 +61,8 @@ TerritoryOverlayItem::TerritoryOverlayItem(QQuickItem *parent) : QQuickPaintedIt
             const qreal progress = value.toReal();
             t.current = {blendColor(t.from.border, t.target.border, progress),
                          blendColor(t.from.band, t.target.band, progress),
-                         t.from.dashed + (t.target.dashed - t.from.dashed) * progress};
+                         t.from.dashed + (t.target.dashed - t.from.dashed) * progress,
+                         t.from.slope + (t.target.slope - t.from.slope) * progress};
             update();
         });
     }
@@ -132,11 +133,12 @@ QVariantMap TerritoryOverlayItem::regionState(int index) const
 
 TerritoryOverlayItem::VisualStyle TerritoryOverlayItem::styleForState(const QVariantMap &state)
 {
-    if (!state.value("known").toBool()) return {QColor(ui::TerritoryUnknown), QColor(255, 255, 255, 55), 0};
+    // 光带白偏一点点暖：叠加后与底图纯白细描线自动分层，单看察觉不到。
+    if (!state.value("known").toBool())
+        return {QColor(ui::TerritoryUnknown), QColor(255, 250, 240, 58), 0, .65};
     const bool red = state.value("controller").toString() == "red";
-    return {QColor(red ? ui::TeamRedFill : ui::TeamBlueFill),
-            QColor(255, 255, 255, 95),
-            state.value("temporary").toBool() ? 1.0 : 0.0};
+    return {QColor(red ? ui::TeamRedFill : ui::TeamBlueFill), QColor(255, 250, 240, 98),
+            state.value("temporary").toBool() ? 1.0 : 0.0, red ? .65 : -.65};
 }
 
 void TerritoryOverlayItem::finishTransitions()
@@ -172,10 +174,8 @@ void TerritoryOverlayItem::paint(QPainter *painter)
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setClipRect(boundingRect());
-    const qreal spacing = qBound(7.0, width() * 0.013, 16.0);
+    const qreal spacing = qBound(9.0, width() * 0.016, 20.0);
     const qreal lineWidth = qBound(1.1, width() * 0.002, 2.2);
-    constexpr qreal slope = .65;
-    const qreal interceptSpacing = spacing * std::sqrt(1 + slope * slope);
     constexpr qreal tau = 6.283185307179586;
     for (int index = 0; index < regionCount(); ++index) {
         const auto path = regionPath(index);
@@ -183,15 +183,20 @@ void TerritoryOverlayItem::paint(QPainter *painter)
         const auto state = regionState(index);
         const bool known = state.value("known").toBool();
         const auto &visual = m_transitions[regionTerritories[index]].current;
+        // 红方用“\”、蓝方用“/”；方向来自过渡后的视觉状态，归属切换时随颜色一起翻转。
+        const qreal slope = visual.slope;
+        const qreal interceptSpacing = spacing * std::sqrt(1 + slope * slope);
         painter->fillPath(path, QColor(235, 248, 255, 7));
         painter->save();
         painter->setClipPath(path, Qt::IntersectClip);
         QPainterPath bands;
         // 光带在轮廓内连续流动，轻微正弦波动；周期接缝为整数行距，不闪回。
+        // 截距范围取包围盒四角的极值：正负斜率（红蓝镜像）及过渡中的任意斜率都能铺满整个区域。
+        const qreal lowest = bounds.top() + std::min(slope * bounds.left(), slope * bounds.right());
+        const qreal highest = bounds.bottom() + std::max(slope * bounds.left(), slope * bounds.right());
         const qreal offset = std::fmod(m_phase * 6, 1.0) * interceptSpacing;
-        const qreal first = std::floor((bounds.top() + slope * bounds.left()) / interceptSpacing)
-            * interceptSpacing + offset - interceptSpacing;
-        for (qreal intercept = first; intercept < bounds.bottom() + slope * bounds.right() + interceptSpacing; intercept += interceptSpacing) {
+        const qreal first = std::floor(lowest / interceptSpacing) * interceptSpacing + offset - interceptSpacing;
+        for (qreal intercept = first; intercept < highest + interceptSpacing; intercept += interceptSpacing) {
             bands.moveTo(bounds.left() - 6, intercept - slope * (bounds.left() - 6)
                 + std::sin((bounds.left() - 6) * .025 + m_phase * tau) * 1.3);
             for (qreal x = bounds.left(); x <= bounds.right() + 12; x += 8)
@@ -235,8 +240,18 @@ void TerritoryOverlayItem::paint(QPainter *painter)
                 QRectF box(center.x() - labelWidth / 2, center.y() - 11, labelWidth, 22);
                 box.moveLeft(qBound(2.0, box.left(), width() - box.width() - 2));
                 box.moveTop(qBound(2.0, box.top(), height() - box.height() - 2));
+                // 切角标签与界面语言一致，不用圆角。
+                const qreal cut = 3;
+                QPainterPath tag;
+                tag.moveTo(box.left() + cut, box.top());
+                tag.lineTo(box.right(), box.top());
+                tag.lineTo(box.right(), box.bottom() - cut);
+                tag.lineTo(box.right() - cut, box.bottom());
+                tag.lineTo(box.left(), box.bottom());
+                tag.lineTo(box.left(), box.top() + cut);
+                tag.closeSubpath();
                 painter->setBrush(QColor(8, 16, 24, 235)); painter->setPen(QPen(actor, 1));
-                painter->drawRoundedRect(box, 3, 3);
+                painter->drawPath(tag);
                 painter->setPen(actor); painter->drawText(box, Qt::AlignCenter, text);
             }
         }

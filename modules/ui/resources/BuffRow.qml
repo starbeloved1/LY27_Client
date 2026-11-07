@@ -19,9 +19,12 @@ Item {
                 readonly property var buff: root.buffs.find(function(value) { return value.type === index + 1 }) ?? ({})
                 objectName: "mapBuff" + (index + 1)
                 visible: buff.icon !== undefined
-                width: 14; height: 14; radius: 2
-                color: Theme.overlay
-                border.color: Theme.border
+                width: 14; height: 14
+                color: "transparent"
+                TechPanel {
+                    anchors.fill: parent; cut: 2
+                    fill: Theme.overlay; line: Theme.border
+                }
                 Image {
                     objectName: "mapBuffImage"
                     anchors.fill: parent; anchors.margins: 1
@@ -31,10 +34,11 @@ Item {
                     mipmap: true
                 }
                 HoverHandler { id: hover }
-                Rectangle {
+                TechPanel {
                     visible: hover.hovered && parent.visible
-                    width: label.implicitWidth + 12; height: 22
-                    y: root.tooltipAbove ? -25 : 17; z: 30; color: Theme.overlay; radius: 3
+                    width: label.implicitWidth + 12; height: 22; cut: 3
+                    y: root.tooltipAbove ? -25 : 17; z: 30
+                    fill: Theme.overlay; line: Theme.border
                     UiText {
                         id: label
                         anchors.centerIn: parent

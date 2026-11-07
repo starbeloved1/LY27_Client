@@ -144,12 +144,6 @@ void EventListModel::observeEconomy()
     m_totalEconomy = total.value;
     m_economySource = s;
 }
-QVariantMap EventListModel::eventPresentation(int id, const QString &parameter, Team team)
-{
-    const auto row = describe(id, parameter, team);
-    if (id < 3 || id > 16 || row.text.startsWith(QStringLiteral("事件 #"))) return {};
-    return {{"id", id}, {"text", row.text}, {"accent", row.color}};
-}
 EventListModel::Row EventListModel::describe(int id, const QString &parameter, Team team)
 {
     Row row;

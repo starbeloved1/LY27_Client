@@ -13,7 +13,7 @@ Rectangle {
     }
     UiText {
         anchors.right: parent.right; anchors.rightMargin: 12; y: 15
-        text: list.count; color: Theme.secondary; font.pixelSize: Theme.caption; font.family: Theme.numberFont
+        text: list.count; color: Theme.secondary; font.pixelSize: Theme.caption; numeric: true
     }
     Rectangle { x: 12; y: 42; width: parent.width - 24; height: 1; color: Theme.divider }
     ListView {
@@ -44,29 +44,42 @@ Rectangle {
             required property string eventTimeSource
             readonly property bool income: eventId === 0
             readonly property bool major: eventId === 1 || eventId === 2 || eventId === 11 || eventId === 14
-            readonly property string symbol: income ? "+" : major ? "!" : eventId >= 5 && eventId <= 8 ? "◇" : "·"
+            readonly property bool territory: eventId >= 5 && eventId <= 8
             width: ListView.view.width
             height: Math.max(40, message.implicitHeight + (root.cramped ? 36 : 18))
             Rectangle { width: parent.width; height: 1; anchors.bottom: parent.bottom; color: Theme.divider; opacity: .7 }
             UiText {
                 x: 0; y: 10; width: 50; height: 16
-                text: row.eventTime; color: Theme.muted; font.pixelSize: Theme.caption; font.family: Theme.numberFont
-                fontSizeMode: Text.Fit; minimumPixelSize: 10
-                textFormat: Text.PlainText
+                text: row.eventTime; color: Theme.muted; font.pixelSize: Theme.caption; numeric: true
+                // 时间列固定字号，不随窗口宽度缩放；超过五个字符时省略。
+                textFormat: Text.PlainText; elide: Text.ElideRight
                 HoverHandler { id: timeHover }
-                Rectangle {
+                TechPanel {
                     visible: timeHover.hovered; y: 18; z: 4
-                    width: timeSource.implicitWidth + 12; height: 22; color: Theme.overlay; border.color: Theme.border; radius: 2
+                    width: timeSource.implicitWidth + 12; height: 22; cut: 2
+                    fill: Theme.overlay; line: Theme.border
                     UiText { id: timeSource; anchors.centerIn: parent; text: row.eventTimeSource; font.pixelSize: Theme.caption }
                 }
             }
-            Rectangle {
-                x: 54; y: 10; width: 13; height: 15; radius: 2
-                color: row.income ? Qt.rgba(Theme.positive.r, Theme.positive.g, Theme.positive.b, .12) : "transparent"
+            TechPanel {
+                x: 54; y: 10; width: 13; height: 15; cut: 2
+                fill: row.income ? Qt.rgba(Theme.positive.r, Theme.positive.g, Theme.positive.b, .12) : "transparent"
+                line: "transparent"
+                // 实心几何符号不依赖字体字形，保证小尺寸下仍能看清事件颜色。
+                Rectangle {
+                    anchors.centerIn: parent
+                    visible: !row.income && !row.major
+                    width: row.territory ? 7 : 6; height: width
+                    radius: row.territory ? 0 : width / 2
+                    rotation: row.territory ? 45 : 0
+                    color: row.eventColor; antialiasing: true
+                }
                 UiText {
-                    anchors.centerIn: parent; text: row.symbol
+                    anchors.centerIn: parent
+                    visible: row.income || row.major
+                    text: row.income ? "¥" : "!"
                     color: row.income ? Theme.positive : row.eventColor
-                    font.pixelSize: Theme.caption; font.bold: row.major
+                    font.pixelSize: row.income ? 14 : Theme.caption; font.bold: true
                 }
             }
             UiText {

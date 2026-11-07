@@ -80,7 +80,7 @@ Item {
                 visible: !root.healthKnown
                 anchors.fill: parent
                 text: "?"
-                color: Theme.text; font.pixelSize: 8; font.family: Theme.numberFont
+                color: Theme.text; font.pixelSize: 8; numeric: true
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }

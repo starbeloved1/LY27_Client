@@ -34,25 +34,25 @@ Item {
         }
     }
     // 轻微偏移的双层投影托起棋子，不依赖模糊滤镜或额外渲染通道。
-    Rectangle { x: -20; y: -18; width: 40; height: 40; radius: 20; color: "#38000000" }
-    Rectangle { x: -18.5; y: -16.5; width: 37; height: 37; radius: 18.5; color: "#42000000" }
+    Rectangle { x: -21; y: -19; width: 42; height: 42; radius: 21; color: "#38000000" }
+    Rectangle { x: -19.5; y: -17.5; width: 39; height: 39; radius: 19.5; color: "#42000000" }
     Rectangle {
         objectName: "robotSelectionGlow"
         visible: root.selected
-        x: -25; y: -25; width: 50; height: 50; radius: 25
+        x: -26; y: -26; width: 52; height: 52; radius: 26
         color: "transparent"; border.color: Theme.tactical; border.width: 4; opacity: .13
     }
     Rectangle {
         objectName: "robotSelectionRing"
         visible: root.selected
-        x: -22; y: -22; width: 44; height: 44; radius: 22
+        x: -23; y: -23; width: 46; height: 46; radius: 23
         color: "transparent"; border.color: Theme.tactical; border.width: 1.6
     }
     Rectangle {
         id: selfRing
         objectName: "robotSelfRing"
         visible: root.self
-        x: -20; y: -20; width: 40; height: 40; radius: 20
+        x: -21; y: -21; width: 42; height: 42; radius: 21
         color: "transparent"; border.color: Theme.selfGreen; border.width: 1.2
     }
     SequentialAnimation {
@@ -67,7 +67,7 @@ Item {
         width: 1; height: 1; rotation: root.angle
         Canvas {
             objectName: "robotHeadingWedge"
-            x: -6.5; y: -27; width: 13; height: 12
+            x: -6.5; y: -28; width: 13; height: 12
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
@@ -87,13 +87,13 @@ Item {
     }
     Rectangle {
         objectName: "robotBadgeOutline"
-        x: -19.5; y: -19.5; width: 39; height: 39; radius: 19.5
+        x: -20.5; y: -20.5; width: 41; height: 41; radius: 20.5
         color: "#cc0b0f14"
     }
     Rectangle {
         id: badge
         objectName: "robotNumberBadge"
-        x: -18; y: -18; width: 36; height: 36; radius: 18
+        x: -19; y: -19; width: 38; height: 38; radius: 19
         color: root.markerColor
         gradient: Gradient {
             GradientStop { position: 0; color: Qt.lighter(root.markerColor, 1.12) }
@@ -113,7 +113,7 @@ Item {
         UiText {
             anchors.centerIn: parent
             text: root.number; color: Theme.headingInk
-            font.pixelSize: 22; font.family: Theme.numberFont; font.bold: true
+            numeric: true; font.pixelSize: 22; font.bold: true
             style: Text.Outline; styleColor: Theme.ink
         }
     }
@@ -136,7 +136,7 @@ Item {
                 objectName: "robotLevelValue"
                 anchors.centerIn: parent
                 text: root.rankText.startsWith("Lv.") ? root.rankText.slice(3) : root.rankText
-                color: Theme.headingInk; font.family: Theme.numberFont; font.pixelSize: 9; font.bold: true
+                color: Theme.headingInk; numeric: true; font.pixelSize: 10; font.bold: true
             }
         }
         Rectangle {
@@ -157,7 +157,7 @@ Item {
             UiText {
                 objectName: "robotHealthUnknown"
                 anchors.fill: parent; visible: !root.ratioKnown
-                text: "?"; color: Theme.text; font.pixelSize: 9; font.family: Theme.numberFont
+                text: "?"; color: Theme.text; font.pixelSize: 9; numeric: true
                 horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
             }
         }

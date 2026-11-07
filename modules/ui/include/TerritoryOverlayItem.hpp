@@ -48,6 +48,8 @@ private:
         QColor border;
         QColor band;
         qreal dashed = 0;
+        // 斜纹方向：红方为正、蓝方为负，两侧读成两股对冲的力。随过渡一起插值。
+        qreal slope = .65;
     };
     struct Transition {
         VisualStyle current;
