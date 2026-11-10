@@ -390,7 +390,36 @@ private slots:
             const int headerHeight = qCeil(item(root, "matchHeader")->height());
             QVERIFY(window.grabWindow().copy(0, 0, size.width(), headerHeight)
                         .save(QString("test-artifacts/header-%1.png").arg(size.width())));
+            const int analysisTop = qRound(rect(analysis).top());
+            QVERIFY(window.grabWindow().copy(0, analysisTop, size.width(), size.height() - analysisTop)
+                        .save(QString("test-artifacts/analysis-%1x%2.png").arg(size.width()).arg(size.height())));
         }
+        // 累计经济降为辅助行后，完整 uint64 读数仍不能截断，尤其检查换行断点两侧。
+        logistics.set_remaining_economy(4294967295U);
+        logistics.set_total_economy_obtained(18446744073709551615ULL);
+        QVERIFY(send(store, logistics, now));
+        for (int width : {640, 759, 760, 800, 1024, 1280, 1920}) {
+            window.resize(width, 800); QTest::qWait(60);
+            auto *analysis = item(root, "battleAnalysisPanel");
+            for (const QString &name : {QString("allyEconomyValue"), QString("allyTotalEconomyValue")}) {
+                auto *value = item(root, name); QVERIFY(value);
+                QCOMPARE(value->property("text").toString(), name == "allyEconomyValue"
+                    ? QString("4294967295") : QString("18446744073709551615"));
+                QVERIFY2(value->property("contentWidth").toReal() <= value->width() + 1,
+                         qPrintable(QString("%1 at %2 px").arg(name).arg(width)));
+                QVERIFY(value->property("contentHeight").toReal() <= value->height() + 1);
+                QVERIFY(rect(analysis).contains(rect(value)));
+                QVERIFY(!rect(value).intersects(rect(item(root, name == "allyEconomyValue"
+                    ? "allyEconomyLabel" : "allyTotalEconomyLabel"))));
+            }
+        }
+        // 空态和真实零值在新的辅助行中继续区分。
+        logistics.set_remaining_economy(0); logistics.clear_total_economy_obtained();
+        QVERIFY(send(store, logistics, now));
+        QCOMPARE(item(root, "allyEconomyValue")->property("text").toString(), QString("0"));
+        QCOMPARE(item(root, "allyTotalEconomyValue")->property("text").toString(), QString("—"));
+        QVERIFY(item(root, "allyEconomyValue")->property("color").value<QColor>()
+            != item(root, "allyTotalEconomyValue")->property("color").value<QColor>());
         QVERIFY(!item(root, "mapViewButton"));
         // 顶部只保留基地数字；前哨血量继续由地图显示。
         units.set_base_health(10000); units.set_enemy_base_health(0);

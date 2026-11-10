@@ -1,7 +1,7 @@
 import QtQuick
 import LY27.Ui 1.0
 
-// 底栏指标卡：切角与地图同一种军工几何；圆形只留给单位标记。
+// 两侧使用相同数值刻度。底板由分析区统一提供，指标只组织文字与轨道。
 Item {
     id: root
     property string metric: ""
@@ -11,6 +11,7 @@ Item {
     property bool showNetRate: false
     property var netRate: null
     readonly property real maximum: Math.max(1, redValue, blueValue)
+    readonly property bool shortLayout: height < 100
 
     function known(value) { return typeof value === "number" && isFinite(value) }
     function rateText(value) {
@@ -20,32 +21,23 @@ Item {
     function rateColor(value) {
         return !known(value) || Math.abs(value) < 0.05 ? Theme.secondary : value > 0 ? Theme.positive : Theme.danger
     }
-    TechPanel {
-        objectName: root.metric + "Card"
-        anchors.fill: parent
-        cut: 4
-        fill: Theme.raised
-        line: "transparent"
-        sheen: Theme.sheen
-    }
+    Item { objectName: root.metric + "Card"; anchors.fill: parent }
     UiText {
         id: titleText
         objectName: root.metric + "Title"
-        x: 12; y: 5
-        width: root.showNetRate ? Math.min(112, root.width * .40) : root.width - 24
-        height: 18
+        width: root.showNetRate ? Math.min(90, root.width * .36) : root.width
+        height: 20
         text: root.title; color: Theme.secondary; font.pixelSize: 13
-        font.bold: true
         verticalAlignment: Text.AlignVCenter
         fontSizeMode: Text.Fit; minimumPixelSize: 9
     }
     UiText {
         objectName: root.metric + "NetRate"
         visible: root.showNetRate
-        x: titleText.x + titleText.width + 8; y: titleText.y
-        width: Math.max(0, parent.width - x - 12); height: titleText.height
+        x: titleText.width + 8; y: titleText.y
+        width: Math.max(0, parent.width - x); height: titleText.height
         text: "我方净增速  " + root.rateText(root.netRate)
-        color: root.rateColor(root.netRate); font.pixelSize: 13
+        color: root.rateColor(root.netRate); font.pixelSize: 12
         fontSizeMode: Text.Fit; minimumPixelSize: 9
         horizontalAlignment: Text.AlignRight; verticalAlignment: Text.AlignVCenter
     }
@@ -58,45 +50,47 @@ Item {
             required property int index
             required property var modelData
             readonly property bool hasValue: modelData.value >= 0
-            x: 12 + index * (root.width - 16) / 2
-            y: 28
-            width: (root.width - 32) / 2
-            height: root.height - y - 8
+            x: index * (root.width + 20) / 2
+            y: root.shortLayout ? 20 : 23
+            width: (root.width - 20) / 2
+            height: root.height - y
             UiText {
                 objectName: modelData.prefix + root.metric + "Label"
                 x: 10; height: 16; width: parent.width - 10
                 text: modelData.label; color: hasValue ? modelData.accent : Theme.unknown
-                font.pixelSize: 12
+                font.pixelSize: 11
             }
-            // 阵营圆点降到半透明，让大数字独占版面重量。
             Rectangle {
-                x: 0; y: 5; width: 4; height: 4; radius: 1
-                color: hasValue ? Qt.rgba(modelData.accent.r, modelData.accent.g, modelData.accent.b, .55) : Theme.unknown
+                y: 6; width: 4; height: 4; radius: 2
+                color: hasValue ? modelData.accent : Theme.unknown
             }
             UiText {
                 objectName: modelData.prefix + root.metric + "Value"
-                y: 18; width: parent.width; height: Math.max(22, parent.height - 26)
+                y: 17; width: parent.width; height: parent.height - y - (root.shortLayout ? 12 : 22)
                 text: hasValue ? String(modelData.value) : "—"
                 color: hasValue ? Theme.text : Theme.unknown
-                numeric: true; font.pixelSize: 42; font.bold: true
-                font.letterSpacing: -.6
-                // 极大累计值仍显示完整数字，不把协议数值格式化为不精确的缩写。
-                fontSizeMode: Text.Fit; minimumPixelSize: 11
+                numeric: true; font.pixelSize: root.shortLayout ? 34 : 46; font.bold: true
+                font.letterSpacing: -.5
+                // 累计值保留全部数字，不用万、M 等缩写改变读数精度。
+                fontSizeMode: Text.Fit; minimumPixelSize: 10
                 verticalAlignment: Text.AlignVCenter
             }
             Rectangle {
-                y: parent.height - 4; width: parent.width; height: 4; radius: 1
+                y: parent.height - 8; width: parent.width; height: 3
                 color: hasValue ? Theme.divider : "transparent"
-                border.width: hasValue ? 0 : 1; border.color: Theme.border
                 Rectangle {
                     objectName: modelData.prefix + root.metric + "Bar"
                     width: parent.width * (hasValue ? modelData.value / root.maximum : 0)
-                    height: parent.height; radius: 1; color: modelData.accent
+                    height: parent.height; color: modelData.accent
                 }
-                // 未收到数据时保留细分段标记，与真实零值的完整空轨道区分。
+                // 未知使用分段轨道，真实零值保留完整的空轨道。
                 Repeater {
-                    model: hasValue ? 0 : 6
-                    Rectangle { required property int index; x: index * parent.width / 6; width: 3; height: parent.height; color: Theme.unknown }
+                    model: hasValue ? 0 : 8
+                    Rectangle {
+                        required property int index
+                        x: index * parent.width / 8; width: parent.width / 8 - 4; height: 1
+                        color: Theme.border
+                    }
                 }
             }
         }
